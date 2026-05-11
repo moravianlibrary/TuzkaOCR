@@ -1,0 +1,18 @@
+TuzkaOCR
+Copyright 2026 Filip Bím and Martina Dvořáková
+
+This product includes software developed by Filip Bím and Martina Dvořáková
+from the Moravian Library in Brno.
+
+The software source code in this repository is licensed under the Apache
+License, Version 2.0. See the LICENSE file for the full license text.
+
+Attribution should be provided in a reasonable manner when redistributing or
+using this software in derived works, documentation, publications, or services.
+Suggested attribution:
+
+  TuzkaOCR, developed by Filip Bím and Martina Dvořáková from the
+  Moravian Library in Brno.
+
+Model artifacts distributed in the models/ directory are not covered by the
+Apache License. See models/LICENSE for their separate license terms.

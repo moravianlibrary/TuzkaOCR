@@ -1,0 +1,27 @@
+Model License
+=============
+
+The model artifacts in this directory are licensed under the Creative Commons
+Attribution-NonCommercial-ShareAlike 4.0 International License
+(CC BY-NC-SA 4.0).
+
+This applies to the model and vocabulary artifacts in this directory,
+including but not limited to:
+
+- dec-A-v3.onnx
+- dec-A-v3k5.onnx
+- rec-E-v4k7.int8.onnx
+- rec-E-v4.int8.onnx
+- vocab.json
+
+You may share and adapt these model artifacts under the terms of CC BY-NC-SA
+4.0, provided that you give appropriate credit, do not use them for commercial
+purposes, and distribute adaptations under the same license.
+
+License text:
+https://creativecommons.org/licenses/by-nc-sa/4.0/
+
+Suggested attribution:
+
+  TuzkaOCR models, developed by Filip Bím and Martina Dvořáková from the
+  Moravian Library in Brno, licensed under CC BY-NC-SA 4.0.

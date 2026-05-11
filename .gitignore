@@ -1,0 +1,34 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+build/
+dist/
+
+# Caches
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Local environments and secrets
+.env
+.venv/
+venv/
+api_keys.yaml
+api_keys.local.yaml
+
+# Runtime data
+results/*
+!results/.gitkeep
+spool/*
+!spool/.gitkeep
+input/
+
+# Editor/OS noise
+.DS_Store
+.idea/
+.vscode/
