@@ -1,9 +1,10 @@
 # TuzkaOCR
 
-OCR pipeline for scanned page and document images. The system detects page layout and text lines, runs line-level OCR, maps recognized words back to source-image coordinates, and returns either ALTO XML with word bounding boxes or plain text.
+Lightweight OCR pipeline for scanned page and document images, optimized for CPU inference. The system detects page layout and text lines, runs line-level OCR, maps recognized words back to source-image coordinates, and returns either ALTO XML with word bounding boxes or plain text.
 
 ## Features
 
+- Lightweight: ~12 MB of model artifacts, no GPU required, runs anywhere ONNX Runtime runs.
 - Page OCR for scanned documents, archival material, and newspapers.
 - ALTO XML output with page, block, line, and word coordinates.
 - CPU and GPU Docker images.
