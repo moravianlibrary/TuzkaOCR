@@ -29,12 +29,12 @@ def _env(key: str, default):
 
 @dataclass
 class Config:
-    layout_model: str = field(default_factory=lambda: _env("LAYOUT_MODEL", "models/dec-A-v3.onnx"))
-    ocr_model:    str = field(default_factory=lambda: _env("OCR_MODEL",    "models/rec-E-v4.int8.onnx"))
-    vocab:        str = field(default_factory=lambda: _env("VOCAB",        "models/vocab.json"))
+    layout_model: str = field(default_factory=lambda: _env("LAYOUT_MODEL", "dec-A-v3.onnx"))
+    ocr_model:    str = field(default_factory=lambda: _env("OCR_MODEL",    "rec-E-v4.int8.onnx"))
+    vocab:        str = field(default_factory=lambda: _env("VOCAB",        "vocab.json"))
 
-    kramarky_layout_model: str = field(default_factory=lambda: _env("KRAMARKY_LAYOUT_MODEL", "models/dec-A-v3k5.onnx"))
-    kramarky_ocr_model:    str = field(default_factory=lambda: _env("KRAMARKY_OCR_MODEL",    "models/rec-E-v4k7.int8.onnx"))
+    kramarky_layout_model: str = field(default_factory=lambda: _env("KRAMARKY_LAYOUT_MODEL", "dec-A-v3k5.onnx"))
+    kramarky_ocr_model:    str = field(default_factory=lambda: _env("KRAMARKY_OCR_MODEL",    "rec-E-v4k7.int8.onnx"))
 
     device:       str   = field(default_factory=lambda: _env("DEVICE",       "cpu"))
     ocr_threads:  int   = field(default_factory=lambda: _env("OCR_THREADS",  4))

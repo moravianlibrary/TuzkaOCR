@@ -8,6 +8,7 @@ from typing import List, Optional, Tuple
 import cv2
 import numpy as np
 
+from . import _models
 from .config import Config
 from .layout.detector import LayoutDetector
 from .ocr.recognizer import OnnxRecognizer
@@ -140,18 +141,23 @@ class PageProcessor:
         self.config = config
         device_str = config.resolve_device()
 
+        layout_path = _models.resolve(config.layout_model)
+        ocr_path    = _models.resolve(config.ocr_model)
+        vocab_path  = _models.resolve(config.vocab)
+
         self.detector = LayoutDetector(
-            config.layout_model,
+            str(layout_path),
             device=device_str,
             threads=config.ocr_threads,
         )
         self.recognizer = OnnxRecognizer(
-            config.ocr_model,
-            vocab_path=config.vocab,
+            str(ocr_path),
+            vocab_path=str(vocab_path),
             device=device_str,
             threads=config.ocr_threads,
             max_width=config.max_width,
         )
+        self._ocr_model_path = ocr_path
 
     def _run(self, img_bgr: np.ndarray,
              height_scale: Optional[float] = None) -> Tuple[int, int, List[dict]]:
@@ -208,7 +214,7 @@ class PageProcessor:
         img_h, img_w, blocks = self._run(img_bgr, height_scale=height_scale)
         if fmt == "txt":
             return _blocks_to_text(blocks)
-        software_name = Path(self.config.ocr_model).stem
+        software_name = self._ocr_model_path.stem
         return build_alto(page_id, img_h, img_w, blocks, software_name=software_name)
 
     def process_file(self, image_path: str | Path, out_path: str | Path | None = None,

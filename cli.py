@@ -40,9 +40,12 @@ def main() -> None:
     p.add_argument("--batch",    action="store_true", help="Process all images in a directory")
     p.add_argument("--workers",  type=int, default=2, help="Parallel page workers (batch)")
 
-    p.add_argument("--layout-model", default="models/dec-A-v3.onnx")
-    p.add_argument("--ocr-model",    default="models/rec-E-v4.int8.onnx")
-    p.add_argument("--vocab",        default="models/vocab.json")
+    p.add_argument("--layout-model", default="dec-A-v3.onnx",
+                   help="Bundled model filename or path to a custom .onnx file")
+    p.add_argument("--ocr-model",    default="rec-E-v4.int8.onnx",
+                   help="Bundled model filename or path to a custom .onnx file")
+    p.add_argument("--vocab",        default="vocab.json",
+                   help="Bundled vocab filename or path to a custom vocab.json")
 
     p.add_argument("--device",      default="cpu",
                    help="Compute device: cpu | cuda | auto")

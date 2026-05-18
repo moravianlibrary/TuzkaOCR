@@ -22,7 +22,6 @@ COPY tuzkaocr/ tuzkaocr/
 COPY api/      api/
 COPY cli.py    cli.py
 COPY tuzkaocr.env tuzkaocr.env
-COPY models/   models/
 
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
@@ -33,12 +32,7 @@ VOLUME ["/app/results"]
 
 EXPOSE 8000
 
-ENV TUZKAOCR_LAYOUT_MODEL=/app/models/dec-A-v3.onnx \
-    TUZKAOCR_OCR_MODEL=/app/models/rec-E-v4.int8.onnx \
-    TUZKAOCR_VOCAB=/app/models/vocab.json \
-    TUZKAOCR_KRAMARKY_LAYOUT_MODEL=/app/models/dec-A-v3k5.onnx \
-    TUZKAOCR_KRAMARKY_OCR_MODEL=/app/models/rec-E-v4k7.int8.onnx \
-    TUZKAOCR_RESULTS_DIR=/app/results \
+ENV TUZKAOCR_RESULTS_DIR=/app/results \
     TUZKAOCR_DEVICE=cuda
 
 USER app

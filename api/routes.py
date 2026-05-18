@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, Form, HTTPException, Request, Security, 
 from fastapi.responses import PlainTextResponse
 from fastapi.security.api_key import APIKeyHeader
 
+from tuzkaocr import _models
 from tuzkaocr.jobs import JobStoreFull
 
 ALLOWED_DOMAINS = {"kramarky"}
@@ -160,8 +161,8 @@ def _submit(request: Request, img: np.ndarray, page_id: str,
 @router.get("/api/v1/models")
 async def list_models(request: Request, caller_name: Optional[str] = Depends(_require_key)):
     cfg = request.app.state.config
-    models_dir = Path(cfg.layout_model).parent
-    onnx_files = sorted(str(p) for p in models_dir.glob("*.onnx") if p.is_file())
+    models_dir = _models.bundled_dir()
+    onnx_files = sorted(p.name for p in models_dir.glob("*.onnx") if p.is_file())
     return {
         "defaults": {
             "ocr_model":    cfg.ocr_model,

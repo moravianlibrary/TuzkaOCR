@@ -29,3 +29,6 @@ py-modules = ["cli"]
 [tool.setuptools.packages.find]
 where = ["."]
 include = ["tuzkaocr*", "api*"]
+
+[tool.setuptools.package-data]
+"tuzkaocr.models" = ["*.onnx", "*.json", "LICENSE"]

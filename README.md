@@ -29,7 +29,7 @@ api/                 FastAPI application and routes
 tuzkaocr/            OCR pipeline package
 tuzkaocr/layout/     Layout detection and post-processing
 tuzkaocr/ocr/        ONNX OCR recognizer and vocabulary handling
-models/              Layout and OCR model files
+tuzkaocr/models/     Bundled layout and OCR model files (shipped in the wheel)
 results/             Runtime OCR outputs, mounted as persistent storage
 spool/               Disk-backed scratch for large uploads (Compose-mounted)
 cli.py               Command-line entry point
@@ -47,19 +47,17 @@ Both layout and OCR models are ONNX, served via ONNX Runtime.
 Default models:
 
 ```text
-models/dec-A-v3.onnx
-models/rec-E-v4.int8.onnx
-models/vocab.json
+dec-A-v3.onnx
+rec-E-v4.int8.onnx
+vocab.json
 ```
 
 Kramarky models:
 
 ```text
-models/dec-A-v3k5.onnx
-models/rec-E-v4k7.int8.onnx
+dec-A-v3k5.onnx
+rec-E-v4k7.int8.onnx
 ```
-
-Use `domain=kramarky` in API requests, or pass the model paths explicitly in CLI mode.
 
 The resulting ALTO XML records the active recognition model under `<OCRProcessing>/<processingSoftware>/<softwareName>` (e.g. `rec-E-v4.int8` or `rec-E-v4k7.int8`), giving downstream consumers explicit provenance for each page.
 
@@ -161,9 +159,8 @@ Batch directory to plain text with Kramarky models:
 python cli.py input_pages/ \
   --batch \
   --format txt \
-  --layout-model models/dec-A-v3k5.onnx \
-  --ocr-model models/rec-E-v4k7.int8.onnx \
-  --vocab models/vocab.json \
+  --layout-model dec-A-v3k5.onnx \
+  --ocr-model rec-E-v4k7.int8.onnx \
   --out-dir results/ \
   --workers 2
 ```
@@ -176,9 +173,8 @@ docker compose run --rm --no-deps \
   cpu python cli.py /app/input \
   --batch \
   --format txt \
-  --layout-model /app/models/dec-A-v3k5.onnx \
-  --ocr-model /app/models/rec-E-v4k7.int8.onnx \
-  --vocab /app/models/vocab.json \
+  --layout-model dec-A-v3k5.onnx \
+  --ocr-model rec-E-v4k7.int8.onnx \
   --out-dir /app/results \
   --workers 2
 ```
@@ -272,5 +268,5 @@ Uploads up to 8 MiB are held in memory; anything larger spills to disk under `TU
 The source code is licensed under the Apache License, Version 2.0. See `LICENSE`
 and `NOTICE`.
 
-The model artifacts in `models/` are licensed separately under CC BY-NC-SA 4.0.
-See `models/LICENSE`.
+The model artifacts in `tuzkaocr/models/` are licensed separately under CC BY-NC-SA 4.0.
+See `tuzkaocr/models/LICENSE`.

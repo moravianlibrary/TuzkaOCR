@@ -14,5 +14,6 @@ Suggested attribution:
   TuzkaOCR, developed by Filip Bím and Martina Dvořáková from the
   Moravian Library in Brno.
 
-Model artifacts distributed in the models/ directory are not covered by the
-Apache License. See models/LICENSE for their separate license terms.
+Model artifacts distributed in the tuzkaocr/models/ directory (bundled with
+the Python package) are not covered by the Apache License. See
+tuzkaocr/models/LICENSE for their separate license terms.
