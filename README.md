@@ -159,8 +159,7 @@ Batch directory to plain text with Kramarky models:
 python cli.py input_pages/ \
   --batch \
   --format txt \
-  --layout-model dec-A-v3k5.onnx \
-  --ocr-model rec-E-v4k7.int8.onnx \
+  --domain kramarky \
   --out-dir results/ \
   --workers 2
 ```
@@ -173,8 +172,7 @@ docker compose run --rm --no-deps \
   cpu python cli.py /app/input \
   --batch \
   --format txt \
-  --layout-model dec-A-v3k5.onnx \
-  --ocr-model rec-E-v4k7.int8.onnx \
+  --domain kramarky \
   --out-dir /app/results \
   --workers 2
 ```

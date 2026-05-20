@@ -40,12 +40,14 @@ def main() -> None:
     p.add_argument("--batch",    action="store_true", help="Process all images in a directory")
     p.add_argument("--workers",  type=int, default=2, help="Parallel page workers (batch)")
 
-    p.add_argument("--layout-model", default="dec-A-v3.onnx",
-                   help="Bundled model filename or path to a custom .onnx file")
-    p.add_argument("--ocr-model",    default="rec-E-v4.int8.onnx",
-                   help="Bundled model filename or path to a custom .onnx file")
-    p.add_argument("--vocab",        default="vocab.json",
-                   help="Bundled vocab filename or path to a custom vocab.json")
+    p.add_argument("--domain",       choices=["default", "kramarky"], default="default",
+                   help="Preset model pair; --layout-model/--ocr-model override individual slots")
+    p.add_argument("--layout-model", default=None,
+                   help="Override layout model (bundled filename or path); default depends on --domain")
+    p.add_argument("--ocr-model",    default=None,
+                   help="Override OCR model (bundled filename or path); default depends on --domain")
+    p.add_argument("--vocab",        default=None,
+                   help="Override vocab (bundled filename or path); default: vocab.json")
 
     p.add_argument("--device",      default="cpu",
                    help="Compute device: cpu | cuda | auto")
@@ -61,10 +63,19 @@ def main() -> None:
 
     args = p.parse_args()
 
+    from tuzkaocr.config import Config
+    _base = Config()
+    if args.domain == "kramarky":
+        domain_layout = _base.kramarky_layout_model
+        domain_ocr    = _base.kramarky_ocr_model
+    else:
+        domain_layout = _base.layout_model
+        domain_ocr    = _base.ocr_model
+
     cfg_kwargs = dict(
-        layout_model  = args.layout_model,
-        ocr_model     = args.ocr_model,
-        vocab         = args.vocab,
+        layout_model  = args.layout_model or domain_layout,
+        ocr_model     = args.ocr_model    or domain_ocr,
+        vocab         = args.vocab        or _base.vocab,
         device        = args.device,
         ocr_threads   = args.ocr_threads,
         line_workers  = args.line_workers,
@@ -74,7 +85,6 @@ def main() -> None:
     )
 
     if not args.batch:
-        from tuzkaocr.config import Config
         from tuzkaocr.pipeline import PageProcessor
 
         cfg = Config(**cfg_kwargs)
