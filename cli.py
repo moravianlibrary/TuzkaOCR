@@ -58,8 +58,9 @@ def main() -> None:
 
     p.add_argument("--height-scale", type=float, default=1.0,
                    help="Multiply predicted line heights (use 1.5 if layout model underestimates)")
-    p.add_argument("--h-dilate", type=int, default=0,
-                   help="Horizontal dilation px (0 = auto-scale with image size)")
+    p.add_argument("--no-adaptive", dest="adaptive", action="store_false",
+                   help="Disable adaptive downsampling (use fixed DS3 layout)")
+    p.set_defaults(adaptive=True)
 
     args = p.parse_args()
 
@@ -81,7 +82,7 @@ def main() -> None:
         line_workers  = args.line_workers,
         page_workers  = args.workers,
         height_scale  = args.height_scale,
-        h_dilate      = args.h_dilate,
+        adaptive_downsample = args.adaptive,
     )
 
     if not args.batch:

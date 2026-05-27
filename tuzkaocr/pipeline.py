@@ -11,6 +11,7 @@ import numpy as np
 from . import _models
 from .config import Config
 from .layout.detector import LayoutDetector
+from .layout import adaptive
 from .ocr.recognizer import OnnxRecognizer
 from .alto import build_alto
 
@@ -158,17 +159,13 @@ class PageProcessor:
             max_width=config.max_width,
         )
         self._ocr_model_path = ocr_path
+        self._layout_model_path = layout_path
 
-    def _run(self, img_bgr: np.ndarray,
-             height_scale: Optional[float] = None) -> Tuple[int, int, List[dict]]:
-        img_h, img_w = img_bgr.shape[:2]
-        cfg = self.config
-        hs = cfg.height_scale if height_scale is None else height_scale
-
-        if cfg.h_dilate > 0:
-            regions, img_scale = self.detector.detect(img_bgr, h_dilate_px=cfg.h_dilate)
-        else:
-            regions, img_scale = self.detector.detect(img_bgr)
+    def _detect_ocr(self, img_bgr: np.ndarray, hs: float,
+                    downsample: Optional[int]) -> dict:
+        regions, img_scale = self.detector.detect(img_bgr, downsample)
+        n_lines = sum(len(r.lines) for r in regions)
+        pitch = adaptive.min_pitch_ratio(regions, img_scale)
 
         line_data: List[_LineInput] = []
         for ri, region in enumerate(regions):
@@ -181,14 +178,19 @@ class PageProcessor:
                     continue
                 line_data.append(_LineInput(gray=gray, M=M, region_idx=ri))
 
-        if not line_data:
-            return img_h, img_w, []
+        results = (self.recognizer.run_lines([d.gray for d in line_data],
+                                             workers=self.config.line_workers)
+                   if line_data else [])
+        confs = [c for (t, _, c) in results if t.strip()]
+        mean_conf = float(np.mean(confs)) if confs else 0.0
 
-        crops = [d.gray for d in line_data]
-        results = self.recognizer.run_lines(crops, workers=cfg.line_workers)
+        return {"line_data": line_data, "results": results,
+                "mean_conf": mean_conf, "pitch": pitch, "n_lines": n_lines}
 
+    @staticmethod
+    def _assemble_blocks(line_data: List[_LineInput], results: list) -> List[dict]:
         region_blocks: dict[int, list] = defaultdict(list)
-        for d, (transcription, word_spans) in zip(line_data, results):
+        for d, (transcription, word_spans, _conf) in zip(line_data, results):
             if not transcription.strip():
                 continue
 
@@ -206,8 +208,30 @@ class PageProcessor:
                 "words": words,
             })
 
-        blocks = [{"lines": region_blocks[ri]} for ri in sorted(region_blocks)]
-        return img_h, img_w, blocks
+        return [{"lines": region_blocks[ri]} for ri in sorted(region_blocks)]
+
+    def _run(self, img_bgr: np.ndarray,
+             height_scale: Optional[float] = None) -> Tuple[int, int, List[dict]]:
+        img_h, img_w = img_bgr.shape[:2]
+        cfg = self.config
+        hs = cfg.height_scale if height_scale is None else height_scale
+
+        if not cfg.adaptive_downsample:
+            r = self._detect_ocr(img_bgr, hs, None)
+            return img_h, img_w, self._assemble_blocks(r["line_data"], r["results"])
+
+        visited = []
+        for k, ds in enumerate(adaptive.DS_LEVELS):
+            r = self._detect_ocr(img_bgr, hs, ds)
+            visited.append({"ds": ds, "conf": r["mean_conf"],
+                            "n_lines": r["n_lines"], "pitch": r["pitch"], "r": r})
+            if k == len(adaptive.DS_LEVELS) - 1:
+                break
+            if not adaptive.starved(r["pitch"], r["mean_conf"]):
+                break
+
+        chosen = adaptive.choose(visited)["r"]
+        return img_h, img_w, self._assemble_blocks(chosen["line_data"], chosen["results"])
 
     def process(self, img_bgr: np.ndarray, page_id: str = "page",
                 fmt: str = "alto", height_scale: Optional[float] = None) -> str:
@@ -215,7 +239,9 @@ class PageProcessor:
         if fmt == "txt":
             return _blocks_to_text(blocks)
         software_name = self._ocr_model_path.stem
-        return build_alto(page_id, img_h, img_w, blocks, software_name=software_name)
+        layout_name = self._layout_model_path.stem
+        return build_alto(page_id, img_h, img_w, blocks,
+                          software_name=software_name, layout_name=layout_name)
 
     def process_file(self, image_path: str | Path, out_path: str | Path | None = None,
                      fmt: str = "alto") -> str:

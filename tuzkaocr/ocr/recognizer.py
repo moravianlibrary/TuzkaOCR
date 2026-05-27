@@ -10,20 +10,28 @@ import onnxruntime as ort
 from .vocab import load_vocab
 
 WordSpan = Tuple[str, int, int]
-LineResult = Tuple[str, List[WordSpan]]
+LineResult = Tuple[str, List[WordSpan], float]
 
 
 def _greedy_ctc(logits: np.ndarray, chars: List[str]) -> LineResult:
     best = logits.argmax(axis=-1)
 
+    m = logits.max(axis=-1, keepdims=True)
+    probs = np.exp(logits - m)
+    probs /= probs.sum(axis=-1, keepdims=True)
+    pmax = probs.max(axis=-1)
+
     char_events: List[Tuple[str, int]] = []
+    confs: List[float] = []
     prev = 0
     for t, idx in enumerate(best):
         if idx != 0 and idx != prev:
             char_events.append((chars[idx - 1], t))
+            confs.append(float(pmax[t]))
         prev = idx
 
     transcription = "".join(c for c, _ in char_events)
+    confidence = float(np.mean(confs)) if confs else 0.0
 
     word_spans: List[WordSpan] = []
     word_chars: List[str] = []
@@ -43,7 +51,7 @@ def _greedy_ctc(logits: np.ndarray, chars: List[str]) -> LineResult:
     if word_chars:
         word_spans.append(("".join(word_chars), word_t_start, t))
 
-    return transcription, word_spans
+    return transcription, word_spans, confidence
 
 
 class OnnxRecognizer:

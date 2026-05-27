@@ -47,8 +47,8 @@ Both layout and OCR models are ONNX, served via ONNX Runtime.
 Default models:
 
 ```text
-dec-A-v3.onnx
-rec-E-v4.int8.onnx
+dec-A-v4.onnx
+rec-E-v5.int8.onnx
 vocab.json
 ```
 
@@ -59,7 +59,7 @@ dec-A-v3k5.onnx
 rec-E-v4k7.int8.onnx
 ```
 
-The resulting ALTO XML records the active recognition model under `<OCRProcessing>/<processingSoftware>/<softwareName>` (e.g. `rec-E-v4.int8` or `rec-E-v4k7.int8`), giving downstream consumers explicit provenance for each page.
+The resulting ALTO XML records both the layout and recognition models under `<OCRProcessing>/<ocrProcessingStep>` entries (`<processingStepDescription>` = `layout` / `recognition`), so downstream consumers see the explicit provenance pair, e.g. `dec-A-v4` + `rec-E-v5.int8` for default, or `dec-A-v3k5` + `rec-E-v4k7.int8` for Kramarky.
 
 ## Docker Deployment
 
@@ -189,7 +189,7 @@ TUZKAOCR_OCR_THREADS=4              # ONNX intra-op threads
 TUZKAOCR_LINE_WORKERS=4             # OCR threads per page
 TUZKAOCR_PAGE_WORKERS=2             # API/background or batch workers
 TUZKAOCR_HEIGHT_SCALE=1.0           # line-height multiplier
-TUZKAOCR_H_DILATE=0                 # 0 = automatic horizontal dilation
+TUZKAOCR_ADAPTIVE_DOWNSAMPLE=true   # true = recover dense pages via adaptive downsampling
 TUZKAOCR_RESULTS_DIR=results        # stored API results
 TUZKAOCR_MAX_JOB_AGE_HOURS=24       # result cleanup age (in-memory jobs + disk files)
 TUZKAOCR_MAX_QUEUE=16               # max simultaneous queued+running jobs (503 above this)
@@ -199,6 +199,18 @@ TUZKAOCR_SPOOL_DIR=                 # optional disk dir for large upload spill; 
 Result files older than `TUZKAOCR_MAX_JOB_AGE_HOURS` are removed on startup and once per hour. The sweep also covers orphaned files left over from previous server lifetimes, not just jobs currently tracked in memory.
 
 Bad values (e.g. `TUZKAOCR_PAGE_WORKERS=0`, an unknown device, a missing `SPOOL_DIR` path) are rejected at startup with a clear error before models load.
+
+## Adaptive downsampling
+
+The layout model runs at a fixed downsample by default. On dense, multi-column pages (periodicals, classifieds) that resolution is too coarse: lines are missed or their geometry is imprecise and the recognized text degrades. With adaptive downsampling enabled (the default), each page is first processed at the standard downsample; if it looks resolution-starved (overlapping baselines or low recognition confidence) the page is re-processed at a finer downsample, and the result with the highest recognition confidence is kept.
+
+Dense pages that escalate cost roughly 2–3x the per-page time for a large quality gain. Disable per request is not supported; control it server-side:
+
+```text
+TUZKAOCR_ADAPTIVE_DOWNSAMPLE=true   # default; set false for fixed single-pass layout
+```
+
+The CLI exposes `--no-adaptive` to force the fixed single-pass path.
 
 ## Authentication
 

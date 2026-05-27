@@ -6,7 +6,7 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 
-from .postprocess import maps_to_regions_structured, Region
+from .postprocess import maps_to_regions, Region
 
 DOWNSAMPLE         = 3
 MAX_ORIGINAL_WIDTH = 1500
@@ -21,10 +21,7 @@ def _sigmoid_inplace(x: np.ndarray) -> None:
 
 
 class LayoutDetector:
-    def __init__(self, model_path: str | Path, device: str = "cpu",
-                 threads: int = 4, postprocess_kwargs: dict | None = None):
-        self.postprocess_kwargs = postprocess_kwargs or {}
-
+    def __init__(self, model_path: str | Path, device: str = "cpu", threads: int = 4):
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = threads
         opts.inter_op_num_threads = max(1, threads // 2)
@@ -47,7 +44,7 @@ class LayoutDetector:
         ch = out[0, 2:5]
         return bool(ch.min() < -0.001 or ch.max() > 1.001)
 
-    def get_maps(self, img_bgr: np.ndarray) -> tuple[np.ndarray, float]:
+    def get_maps(self, img_bgr: np.ndarray, downsample: int | None = None) -> tuple[np.ndarray, float]:
         orig_h, orig_w = img_bgr.shape[:2]
         h, w = orig_h, orig_w
 
@@ -58,8 +55,8 @@ class LayoutDetector:
                                  interpolation=cv2.INTER_AREA)
             h, w = img_bgr.shape[:2]
 
-        ds     = DOWNSAMPLE
-        img_ds = cv2.resize(img_bgr, (w // ds, h // ds), interpolation=cv2.INTER_AREA)
+        ds     = downsample or DOWNSAMPLE
+        img_ds = cv2.resize(img_bgr, (max(1, w // ds), max(1, h // ds)), interpolation=cv2.INTER_AREA)
         hd, wd = img_ds.shape[:2]
 
         if max(hd, wd) > MAX_SIDE:
@@ -85,36 +82,32 @@ class LayoutDetector:
         maps = out[0, :, :hd, :wd].transpose(1, 2, 0)
         return np.ascontiguousarray(maps, dtype=np.float32), img_scale
 
-    def detect(self, img_bgr: np.ndarray, **postprocess_kwargs) -> tuple[list[Region], float]:
+    def detect(self, img_bgr: np.ndarray, downsample: int | None = None) -> tuple[list[Region], float]:
         orig_h, orig_w = img_bgr.shape[:2]
         if orig_w > orig_h * 1.2:
-            return self._detect_split(img_bgr, **postprocess_kwargs)
+            return self._detect_split(img_bgr, downsample)
 
-        maps, img_scale = self.get_maps(img_bgr)
-        kwargs = dict(self.postprocess_kwargs)
-        kwargs.update(postprocess_kwargs)
-        return maps_to_regions_structured(maps, **kwargs), img_scale
+        maps, img_scale = self.get_maps(img_bgr, downsample)
+        return maps_to_regions(maps), img_scale
 
-    def _detect_split(self, img_bgr: np.ndarray, **postprocess_kwargs) -> tuple[list[Region], float]:
+    def _detect_split(self, img_bgr: np.ndarray, downsample: int | None = None) -> tuple[list[Region], float]:
         h, w = img_bgr.shape[:2]
         mid = w // 2
+        ds = downsample or DOWNSAMPLE
 
-        kwargs = dict(self.postprocess_kwargs)
-        kwargs.update(postprocess_kwargs)
-
-        left_maps, _  = self.get_maps(img_bgr[:, :mid])
+        left_maps, _  = self.get_maps(img_bgr[:, :mid], downsample)
         L_wd = left_maps.shape[1]
-        left_regions = maps_to_regions_structured(left_maps, **kwargs)
+        left_regions = maps_to_regions(left_maps)
 
-        right_maps, _ = self.get_maps(img_bgr[:, mid:])
+        right_maps, _ = self.get_maps(img_bgr[:, mid:], downsample)
         R_wd = right_maps.shape[1]
-        right_regions = maps_to_regions_structured(right_maps, **kwargs)
+        right_regions = maps_to_regions(right_maps)
 
         pre_scale = MAX_ORIGINAL_WIDTH / w if w > MAX_ORIGINAL_WIDTH else 1.0
         F_w = int(w * pre_scale) if w > MAX_ORIGINAL_WIDTH else w
         F_h = max(1, int(h * pre_scale))
-        F_wd = F_w // DOWNSAMPLE
-        F_hd = F_h // DOWNSAMPLE
+        F_wd = max(1, F_w // ds)
+        F_hd = max(1, F_h // ds)
         if max(F_hd, F_wd) > MAX_SIDE:
             s = MAX_SIDE / max(F_hd, F_wd)
             F_hd = max(1, int(F_hd * s))

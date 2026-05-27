@@ -29,8 +29,8 @@ def _env(key: str, default):
 
 @dataclass
 class Config:
-    layout_model: str = field(default_factory=lambda: _env("LAYOUT_MODEL", "dec-A-v3.onnx"))
-    ocr_model:    str = field(default_factory=lambda: _env("OCR_MODEL",    "rec-E-v4.int8.onnx"))
+    layout_model: str = field(default_factory=lambda: _env("LAYOUT_MODEL", "dec-A-v4.onnx"))
+    ocr_model:    str = field(default_factory=lambda: _env("OCR_MODEL",    "rec-E-v5.int8.onnx"))
     vocab:        str = field(default_factory=lambda: _env("VOCAB",        "vocab.json"))
 
     kramarky_layout_model: str = field(default_factory=lambda: _env("KRAMARKY_LAYOUT_MODEL", "dec-A-v3k5.onnx"))
@@ -42,8 +42,9 @@ class Config:
     page_workers: int   = field(default_factory=lambda: _env("PAGE_WORKERS", 2))
 
     height_scale: float = field(default_factory=lambda: _env("HEIGHT_SCALE", 1.0))
-    h_dilate:     int   = field(default_factory=lambda: _env("H_DILATE",     0))
     max_width:    int   = field(default_factory=lambda: _env("MAX_WIDTH",    1600))
+
+    adaptive_downsample: bool = field(default_factory=lambda: _env("ADAPTIVE_DOWNSAMPLE", True))
 
     results_dir:        str = field(default_factory=lambda: _env("RESULTS_DIR",        "results"))
     max_job_age_hours:  int = field(default_factory=lambda: _env("MAX_JOB_AGE_HOURS",  24))
@@ -75,7 +76,6 @@ class Config:
         _pos_int("max_upload_mb",     self.max_upload_mb)
         _pos_int("max_image_pixels",  self.max_image_pixels)
         _pos_int("max_job_age_hours", self.max_job_age_hours)
-        _pos_int("h_dilate",          self.h_dilate, allow_zero=True)
 
         if self.device not in self._ALLOWED_DEVICES:
             errors.append(

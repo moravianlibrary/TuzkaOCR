@@ -1,147 +1,38 @@
 from __future__ import annotations
-
 from collections import defaultdict
 from dataclasses import dataclass, field
 from typing import List, Tuple
-
 import cv2
 import numpy as np
 from scipy import ndimage as ndi
 
-BASELINE_THRESH    = 0.35
-ENDPOINT_THRESH    = 0.40
-MIN_LINE_PX        = 30
-NMS_HALF_WIN       = 3
-H_DILATE_PX        = 12
-V_DILATE_PX        = 0
-REGION_GAP_FACTOR  = 2.5
-MIN_REGION_LINES   = 1
-COL_GAP_MIN_WIDTH  = 8
-
-
 @dataclass
 class TextLine:
     baseline: List[Tuple[int, int]]
-    polygon:  List[Tuple[int, int]]
-    heights:  Tuple[float, float]
-
+    polygon: List[Tuple[int, int]]
+    heights: Tuple[float, float]
 
 @dataclass
 class Region:
-    lines:   List[TextLine] = field(default_factory=list)
+    lines: List[TextLine] = field(default_factory=list)
     polygon: List[Tuple[int, int]] = field(default_factory=list)
 
-
-def _nms_baseline(prob: np.ndarray,
-                  half_win: int = NMS_HALF_WIN,
-                  threshold: float = BASELINE_THRESH) -> np.ndarray:
+def _nms_baseline(prob: np.ndarray, half_win: int=2, threshold: float=0.35) -> np.ndarray:
     kernel = np.ones((2 * half_win + 1, 1), dtype=np.float32)
-    local_max = ndi.maximum_filter(prob, footprint=kernel, mode="constant")
-    return ((prob >= local_max - 1e-6) & (prob > threshold)).astype(np.uint8)
+    local_max = ndi.maximum_filter(prob, footprint=kernel, mode='constant')
+    return ((prob >= local_max - 1e-06) & (prob > threshold)).astype(np.uint8)
 
-
-def _split_at_endpoints(binary: np.ndarray,
-                         endpoint_prob: np.ndarray,
-                         threshold: float = ENDPOINT_THRESH) -> np.ndarray:
-    ep_mask = (endpoint_prob > threshold).astype(np.uint8)
-    ep_dilated = cv2.dilate(ep_mask, np.ones((3, 3), np.uint8), iterations=1)
-    return binary & (~ep_dilated).astype(np.uint8)
-
-
-def _nms_baseline_subtract_endpoints(prob: np.ndarray,
-                                     endpoint_prob: np.ndarray,
-                                     half_win: int = 2,
-                                     threshold: float = BASELINE_THRESH,
-                                     endpoint_weight: float = 1.0) -> np.ndarray:
+def _nms_baseline_subtract_endpoints(prob: np.ndarray, endpoint_prob: np.ndarray, half_win: int=2, threshold: float=0.35, endpoint_weight: float=0.5) -> np.ndarray:
     kernel = np.ones((2 * half_win + 1, 1), dtype=np.float32)
-    local_max = ndi.maximum_filter(prob, footprint=kernel, mode="constant")
-    nms = prob * (prob >= local_max - 1e-6)
-    return ((nms - endpoint_weight * endpoint_prob) > threshold).astype(np.uint8)
+    local_max = ndi.maximum_filter(prob, footprint=kernel, mode='constant')
+    nms = prob * (prob >= local_max - 1e-06)
+    return (nms - endpoint_weight * endpoint_prob > threshold).astype(np.uint8)
 
-
-def _label_components(binary: np.ndarray,
-                       h_dilate: int = H_DILATE_PX,
-                       v_dilate: int = V_DILATE_PX) -> Tuple[np.ndarray, int]:
-    if h_dilate > 0 or v_dilate > 0:
-        kh = v_dilate * 2 + 1 if v_dilate > 0 else 1
-        kw = h_dilate * 2 + 1 if h_dilate > 0 else 1
-        kernel  = np.ones((kh, kw), np.uint8)
-        dilated = cv2.dilate(binary, kernel, iterations=1)
-    else:
-        dilated = binary
-    num, labels = cv2.connectedComponents(dilated, connectivity=8)
-    return labels, num - 1
-
-
-def _detect_column_splits(binary: np.ndarray,
-                           min_gap_width: int = COL_GAP_MIN_WIDTH) -> List[int]:
-    H, W = binary.shape
-
-    x_density = binary.sum(axis=0).astype(float)
-
-    nonzero = x_density[x_density > 0]
-    if len(nonzero) == 0:
-        return []
-    gap_thresh = float(np.percentile(nonzero, 50)) * 0.06
-
-    splits = []
-    in_gap = False
-    gap_start = 0
-
-    for x in range(W):
-        if x_density[x] <= gap_thresh:
-            if not in_gap:
-                in_gap = True
-                gap_start = x
-        else:
-            if in_gap:
-                in_gap = False
-                gap_end = x
-                gap_w = gap_end - gap_start
-                if gap_w < min_gap_width:
-                    continue
-                min_px = max(10, int(H * 0.025))
-                left_col  = binary[:, max(0, gap_start - 10):gap_start]
-                right_col = binary[:, gap_end:min(W, gap_end + 10)]
-                if int(left_col.sum()) >= min_px and int(right_col.sum()) >= min_px:
-                    splits.append((gap_start + gap_end) // 2)
-
-    return splits
-
-
-def _mask_column_gaps(binary: np.ndarray,
-                      h_dilate_px: int,
-                      col_gap_min_width: int = COL_GAP_MIN_WIDTH) -> np.ndarray:
-    effective_min_width = max(col_gap_min_width, h_dilate_px)
-    col_splits = _detect_column_splits(binary, min_gap_width=effective_min_width)
-    if not col_splits:
-        return binary
-
-    _, W_b = binary.shape
-    x_dens = binary.sum(axis=0).astype(float)
-    nonzero = x_dens[x_dens > 0]
-    gap_thresh = float(np.percentile(nonzero, 50)) * 0.06 if len(nonzero) else 0
-    masked = binary.copy()
-    for xs in col_splits:
-        lo, hi = xs, xs
-        while lo > 0 and x_dens[lo - 1] <= max(gap_thresh, 5):
-            lo -= 1
-        while hi < W_b - 1 and x_dens[hi + 1] <= max(gap_thresh, 5):
-            hi += 1
-        lo = max(0, lo - h_dilate_px)
-        hi = min(W_b - 1, hi + h_dilate_px)
-        masked[:, lo:hi + 1] = 0
-    return masked
-
-
-def _extract_baseline_points(mask: np.ndarray,
-                               step: int = 4) -> List[Tuple[int, int]]:
+def _extract_baseline_points(mask: np.ndarray, step: int=4) -> List[Tuple[int, int]]:
     ys, xs = np.where(mask)
     if len(xs) == 0:
         return []
-    x_min, x_max = int(xs.min()), int(xs.max())
-    if x_max - x_min < MIN_LINE_PX:
-        return []
+    x_min, x_max = (int(xs.min()), int(xs.max()))
     points = []
     for x in range(x_min, x_max + 1, step):
         col_ys = ys[xs == x]
@@ -158,62 +49,32 @@ def _extract_baseline_points(mask: np.ndarray,
             points.append((x_max, int(np.median(col_ys))))
     return sorted(points, key=lambda p: p[0])
 
-
-def _sample_heights(points, asc_map, desc_map):
-    if not points:
-        return (10.0, 5.0)
-    H, W = asc_map.shape
-    ascs, descs = [], []
-    for x, y in points:
-        xc, yc = min(x, W - 1), min(y, H - 1)
-        ascs.append(float(asc_map[yc, xc]))
-        descs.append(float(desc_map[yc, xc]))
-    return (float(np.median(ascs)), float(np.median(descs)))
-
-
-def _sample_component_heights(mask: np.ndarray,
-                              asc_map: np.ndarray,
-                              desc_map: np.ndarray,
-                              percentile: float = 50.0) -> Tuple[float, float]:
+def _sample_component_heights(mask: np.ndarray, asc_map: np.ndarray, desc_map: np.ndarray, percentile: float=70.0) -> Tuple[float, float]:
     ys, xs = np.where(mask)
     if len(xs) == 0:
         return (10.0, 5.0)
     ascs = np.maximum(asc_map[ys, xs], 0)
     descs = np.maximum(desc_map[ys, xs], 0)
-    return (float(np.percentile(ascs, percentile)),
-            float(np.percentile(descs, percentile)))
+    return (float(np.percentile(ascs, percentile)), float(np.percentile(descs, percentile)))
 
-
-def _baseline_to_polygon(points, asc, desc, min_asc=3.0, min_desc=2.0):
-    asc  = max(asc,  min_asc)
-    desc = max(desc, min_desc)
-    top    = [(x, y - int(round(asc)))  for x, y in points]
-    bottom = [(x, y + int(round(desc))) for x, y in reversed(points)]
-    return top + bottom
-
-
-def _baseline_to_polygon_normal(points, asc, desc, min_asc=3.0, min_desc=2.0):
+def _baseline_to_polygon_normal(points, asc, desc, min_asc=1.0, min_desc=1.0):
     asc = max(float(asc), min_asc)
     desc = max(float(desc), min_desc)
     if len(points) < 2:
-        return _baseline_to_polygon(points, asc, desc, min_asc, min_desc)
-
+        x, y = points[0]
+        return [(x - 2, y - int(asc)), (x + 2, y - int(asc)), (x + 2, y + int(desc)), (x - 2, y + int(desc))]
     pts = np.asarray(points, dtype=np.float32)
     diffs = np.diff(pts, axis=0)
     diffs = np.vstack([diffs, diffs[-1:]])
     angles = np.pi / 2 + np.arctan2(diffs[:, 1], diffs[:, 0])
-
     up = pts.copy()
     up[:, 0] -= np.cos(angles) * asc
     up[:, 1] -= np.sin(angles) * asc
-
     down = pts.copy()
     down[:, 0] += np.cos(angles) * desc
     down[:, 1] += np.sin(angles) * desc
-
     poly = np.vstack([up, down[::-1]])
     return [(int(round(x)), int(round(y))) for x, y in poly]
-
 
 def _region_hull(lines):
     pts = []
@@ -225,342 +86,212 @@ def _region_hull(lines):
     hull = cv2.convexHull(arr)
     return [(int(p[0][0]), int(p[0][1])) for p in hull]
 
-
 def _line_center_x(ln: TextLine) -> float:
     xs = [p[0] for p in ln.baseline]
     return float(np.mean(xs)) if xs else 0.0
-
 
 def _line_center_y(ln: TextLine) -> float:
     ys = [p[1] for p in ln.baseline]
     return float(np.mean(ys)) if ys else 0.0
 
-
 def _line_x_range(ln: TextLine) -> Tuple[int, int]:
     xs = [p[0] for p in ln.baseline]
     return (min(xs), max(xs)) if xs else (0, 0)
 
-
-def _sort_regions_by_column(regions: List[Region], width: int) -> None:
-    col_width = max(1, width // 4)
-    regions.sort(key=lambda r: (
-        int(_line_center_x(r.lines[0]) / col_width),
-        _line_center_y(r.lines[0]),
-    ))
-
-
-def _cluster_lines(lines: List[TextLine],
-                    region_map: np.ndarray,
-                    gap_factor: float = REGION_GAP_FACTOR,
-                    x_overlap_min: int = 5,
-                    region_boundary_thresh: float = 0.65) -> List[Region]:
-    if not lines:
-        return []
-
-    sorted_lines = sorted(lines, key=_line_center_y)
-    n = len(sorted_lines)
-
-    heights = [h for h in (ln.heights[0] + ln.heights[1] for ln in sorted_lines) if h > 0]
-    median_h = float(np.median(heights)) if heights else 20.0
-    H, W = region_map.shape
-
-    parent = list(range(n))
-
-    def find(x: int) -> int:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(a: int, b: int) -> None:
-        parent[find(a)] = find(b)
-
-    max_gap = gap_factor * median_h * 1.1
-
-    for i in range(n):
-        xi0, xi1 = _line_x_range(sorted_lines[i])
-        cy_i = _line_center_y(sorted_lines[i])
-
-        for j in range(i + 1, n):
-            cy_j = _line_center_y(sorted_lines[j])
-            if cy_j - cy_i > max_gap:
-                break
-
-            xj0, xj1 = _line_x_range(sorted_lines[j])
-            x_overlap = max(0, min(xi1, xj1) - max(xi0, xj0))
-            if x_overlap < x_overlap_min:
-                continue
-
-            if cy_j - cy_i > gap_factor * median_h:
-                continue
-
-            mid_y = int((cy_i + cy_j) / 2)
-            mid_x = int((max(xi0, xj0) + min(xi1, xj1)) / 2)
-            mid_y = min(mid_y, H - 1)
-            mid_x = min(mid_x, W - 1)
-            if region_map[mid_y, mid_x] > region_boundary_thresh:
-                continue
-
-            union(i, j)
-
-    groups: dict = defaultdict(list)
-    for i, ln in enumerate(sorted_lines):
-        groups[find(i)].append(ln)
-
-    regions = []
-    for group_lines in groups.values():
-        if len(group_lines) < MIN_REGION_LINES:
-            continue
-        group_sorted = sorted(group_lines, key=_line_center_y)
-        regions.append(Region(lines=group_sorted, polygon=_region_hull(group_lines)))
-
-    _sort_regions_by_column(regions, W)
-    return regions
-
-
-def _interpolate_baseline_y(points: List[Tuple[int, int]], xs: np.ndarray) -> np.ndarray:
-    arr = np.asarray(points, dtype=np.float32)
-    if len(arr) == 1:
-        return np.full_like(xs, arr[0, 1], dtype=np.float32)
-    return np.interp(xs, arr[:, 0], arr[:, 1]).astype(np.float32)
-
-
-def _separator_score_between(a: TextLine, b: TextLine,
-                             region_map: np.ndarray,
-                             sample_count: int = 32) -> float:
-    ax0, ax1 = _line_x_range(a)
-    bx0, bx1 = _line_x_range(b)
-    x0, x1 = max(ax0, bx0), min(ax1, bx1)
-    if x1 - x0 < 5:
-        return 1.0
-
-    H, W = region_map.shape
-    xs = np.linspace(x0, x1, max(4, min(sample_count, x1 - x0 + 1)), dtype=np.float32)
-    ya = _interpolate_baseline_y(a.baseline, xs)
-    yb = _interpolate_baseline_y(b.baseline, xs)
-    mid = (ya + yb) / 2.0
-
-    x_idx = np.clip(np.round(xs).astype(np.int32), 0, W - 1)
-    y_idx = np.clip(np.round(mid).astype(np.int32), 0, H - 1)
-    return float(np.mean(region_map[y_idx, x_idx]))
-
-
-def _cluster_lines_structured(lines: List[TextLine],
-                              region_map: np.ndarray,
-                              separator_thresh: float = 0.15,
-                              gap_factor: float = REGION_GAP_FACTOR,
-                              x_overlap_min: int = 5) -> List[Region]:
-    if not lines:
-        return []
-
-    sorted_lines = sorted(lines, key=_line_center_y)
-    n = len(sorted_lines)
-    heights = [
-        max(1.0, float(h))
-        for h in (ln.heights[0] + ln.heights[1] for ln in sorted_lines)
-        if h > 0
-    ]
-    median_h = float(np.median(heights)) if heights else 20.0
-
-    parent = list(range(n))
-
-    def find(x: int) -> int:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
-
-    def union(a: int, b: int) -> None:
-        ra, rb = find(a), find(b)
-        if ra != rb:
-            parent[ra] = rb
-
-    max_gap = gap_factor * median_h
-    for i in range(n):
-        xi0, xi1 = _line_x_range(sorted_lines[i])
-        cy_i = _line_center_y(sorted_lines[i])
-
-        for j in range(i + 1, n):
-            cy_j = _line_center_y(sorted_lines[j])
-            if cy_j - cy_i > max_gap:
-                break
-
-            xj0, xj1 = _line_x_range(sorted_lines[j])
-            x_overlap = max(0, min(xi1, xj1) - max(xi0, xj0))
-            if x_overlap < x_overlap_min:
-                continue
-
-            if _separator_score_between(sorted_lines[i], sorted_lines[j], region_map) < separator_thresh:
-                union(i, j)
-
-    groups: dict = defaultdict(list)
-    for i, ln in enumerate(sorted_lines):
-        groups[find(i)].append(ln)
-
-    regions = []
-    for group_lines in groups.values():
-        group_sorted = sorted(group_lines, key=_line_center_y)
-        regions.append(Region(lines=group_sorted, polygon=_region_hull(group_sorted)))
-
-    _sort_regions_by_column(regions, region_map.shape[1])
-    return regions
-
-
-def _maps_to_regions_legacy(maps: np.ndarray,
-                     baseline_step: int = 4,
-                     baseline_thresh: float = BASELINE_THRESH,
-                     endpoint_thresh: float = ENDPOINT_THRESH,
-                     h_dilate_px: int = H_DILATE_PX,
-                     v_dilate_px: int = V_DILATE_PX,
-                     region_gap_factor: float = REGION_GAP_FACTOR,
-                     region_boundary_thresh: float = 0.65,
-                     nms_half_win: int = NMS_HALF_WIN,
-                     col_gap_min_width: int = COL_GAP_MIN_WIDTH) -> List[Region]:
-    asc_map  = maps[:, :, 0]
-    desc_map = maps[:, :, 1]
-    base_map = maps[:, :, 2]
-    ep_map   = maps[:, :, 3]
-    reg_map  = maps[:, :, 4]
-
-    binary = _nms_baseline(base_map, half_win=nms_half_win,
-                           threshold=baseline_thresh)
-    binary = _split_at_endpoints(binary, ep_map, threshold=endpoint_thresh)
-
-    binary_for_cc = _mask_column_gaps(
-        binary, h_dilate_px=h_dilate_px,
-        col_gap_min_width=col_gap_min_width)
-
-    labels, n_comp = _label_components(binary_for_cc, h_dilate=h_dilate_px,
-                                       v_dilate=v_dilate_px)
-
-    lines: List[TextLine] = []
-    for label_id in range(1, n_comp + 1):
-        comp_mask = (labels == label_id).astype(np.uint8)
-        raw_mask = (comp_mask & binary_for_cc).astype(np.uint8)
-        pts = _extract_baseline_points(raw_mask, step=baseline_step)
-        if not pts:
-            pts = _extract_baseline_points(comp_mask, step=baseline_step)
-        if not pts:
-            continue
-        asc, desc = _sample_heights(pts, asc_map, desc_map)
-        poly = _baseline_to_polygon(pts, asc, desc)
-        lines.append(TextLine(baseline=pts, polygon=poly, heights=(asc, desc)))
-
-    return _cluster_lines(lines, reg_map, gap_factor=region_gap_factor,
-                          region_boundary_thresh=region_boundary_thresh)
-
-
-def _line_count(regions: List[Region]) -> int:
-    return sum(len(region.lines) for region in regions)
-
-
-def _line_width_percentile(regions: List[Region], width: int,
-                           percentile: float = 90.0) -> float:
-    line_widths = []
-    for region in regions:
-        for line in region.lines:
-            x0, x1 = _line_x_range(line)
-            line_widths.append(max(0, x1 - x0))
-    if not line_widths or width <= 0:
-        return 0.0
-    return float(np.percentile(line_widths, percentile)) / float(width)
-
-
-def _maps_to_regions_structured_once(maps: np.ndarray,
-                                     baseline_step: int,
-                                     baseline_thresh: float,
-                                     endpoint_weight: float,
-                                     h_dilate_px: int,
-                                     vertical_connection_range: int,
-                                     height_percentile: float,
-                                     separator_thresh: float,
-                                     nms_half_win: int,
-                                     col_gap_min_width: int) -> List[Region]:
-    asc_map = maps[:, :, 0]
-    desc_map = maps[:, :, 1]
+def _binarize(maps: np.ndarray, half_win: int=1, threshold: float=0.35, endpoint_weight: float=0.5) -> Tuple[np.ndarray, float]:
     base_map = maps[:, :, 2]
     ep_map = maps[:, :, 3]
-    reg_map = np.maximum(maps[:, :, 4], 0)
+    binary = _nms_baseline_subtract_endpoints(base_map, ep_map, half_win=half_win, threshold=threshold, endpoint_weight=endpoint_weight)
+    ys, xs = np.where(binary)
+    if len(xs) == 0:
+        return (binary, 10.0)
+    asc_samples = np.maximum(maps[ys, xs, 0], 0)
+    median_asc = float(np.median(asc_samples))
+    return (binary, median_asc)
 
-    height_maps = ndi.grey_dilation(maps[:, :, :2], size=(5, 1, 1))
-    asc_h = height_maps[:, :, 0]
-    desc_h = height_maps[:, :, 1]
-
-    binary = _nms_baseline_subtract_endpoints(
-        base_map, ep_map, half_win=nms_half_win,
-        threshold=baseline_thresh, endpoint_weight=endpoint_weight,
-    )
-
-    binary_for_cc = _mask_column_gaps(
-        binary, h_dilate_px=h_dilate_px,
-        col_gap_min_width=col_gap_min_width)
-
-    labels, n_comp = _label_components(
-        binary_for_cc,
-        h_dilate=h_dilate_px,
-        v_dilate=max(0, vertical_connection_range // 2),
-    )
-
+def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: float, threshold: float=0.35, endpoint_weight: float=0.5) -> List[TextLine]:
+    base_map = maps[:, :, 2]
+    ep_map = maps[:, :, 3]
+    if median_asc > 10:
+        nms_half_win = 2
+        v_dilate = 5
+        h_dilate = 2
+        min_pixels = 8
+    else:
+        nms_half_win = 1
+        v_dilate = 3
+        h_dilate = 1
+        min_pixels = max(5, int(median_asc))
+    binary = _nms_baseline_subtract_endpoints(base_map, ep_map, half_win=nms_half_win, threshold=threshold, endpoint_weight=endpoint_weight)
+    kernel = np.ones((v_dilate, 2 * h_dilate + 1), dtype=np.uint8)
+    dilated = cv2.dilate(binary, kernel, iterations=1)
+    num, labels = cv2.connectedComponents(dilated, connectivity=8)
+    labels = labels * binary.astype(labels.dtype)
+    asc_h = ndi.grey_dilation(maps[:, :, 0], size=(5, 1))
+    desc_h = ndi.grey_dilation(maps[:, :, 1], size=(5, 1))
+    extend = max(1, int(median_asc * 0.25))
+    min_asc_poly = max(1.0, median_asc * 0.5)
+    min_desc_poly = max(1.0, median_asc * 0.4)
+    H_map, W_map = binary.shape
     lines: List[TextLine] = []
-    for label_id in range(1, n_comp + 1):
-        comp_mask = (labels == label_id).astype(np.uint8)
-        raw_mask = (comp_mask & binary_for_cc).astype(np.uint8)
-        if raw_mask.sum() == 0:
-            raw_mask = comp_mask
-        pts = _extract_baseline_points(raw_mask, step=baseline_step)
-        if not pts:
+    for lid in range(1, num):
+        comp_mask = (labels == lid).astype(np.uint8)
+        if comp_mask.sum() < min_pixels:
             continue
-        asc, desc = _sample_component_heights(
-            raw_mask, asc_h, desc_h, percentile=height_percentile)
-        poly = _baseline_to_polygon_normal(pts, asc, desc)
+        pts = _extract_baseline_points(comp_mask, step=4)
+        if len(pts) < 2:
+            continue
+        (x0, y0), (x1, y1) = (pts[0], pts[1])
+        dxs, dys = (x1 - x0, y1 - y0)
+        n0 = max(1e-06, (dxs * dxs + dys * dys) ** 0.5)
+        ex0 = max(0, int(x0 - dxs / n0 * extend))
+        ey0 = int(y0 - dys / n0 * extend)
+        (xa, ya), (xb, yb) = (pts[-2], pts[-1])
+        dxe, dye = (xb - xa, yb - ya)
+        ne = max(1e-06, (dxe * dxe + dye * dye) ** 0.5)
+        ex1 = min(W_map - 1, int(xb + dxe / ne * extend))
+        ey1 = int(yb + dye / ne * extend)
+        pts = [(ex0, max(0, min(H_map - 1, ey0)))] + pts + [(ex1, max(0, min(H_map - 1, ey1)))]
+        asc, desc = _sample_component_heights(comp_mask, asc_h, desc_h, percentile=70.0)
+        poly = _baseline_to_polygon_normal(pts, asc, desc, min_asc=min_asc_poly, min_desc=min_desc_poly)
         lines.append(TextLine(baseline=pts, polygon=poly, heights=(asc, desc)))
+    return lines
 
-    return _cluster_lines_structured(lines, reg_map, separator_thresh=separator_thresh)
+def _path_penalty(b_top: np.ndarray, b_bot: np.ndarray, shift_top: float, shift_bot: float, x1: int, x2: int, region_map: np.ndarray) -> float:
+    H, W = region_map.shape
+    if x2 <= x1:
+        return 0.0
+    pts_top = b_top.astype(np.int32).copy()
+    pts_top[:, 1] = np.clip(pts_top[:, 1] + int(round(shift_top)), 0, H - 1)
+    pts_bot = b_bot.astype(np.int32).copy()
+    pts_bot[:, 1] = np.clip(pts_bot[:, 1] + int(round(shift_bot)), 0, H - 1)
+    y_min = max(0, min(pts_top[:, 1].min(), pts_bot[:, 1].min()) - 1)
+    y_max = min(H, max(pts_top[:, 1].max(), pts_bot[:, 1].max()) + 2)
+    if y_max - y_min < 2:
+        return 0.0
+    x_min = max(0, x1 - 2)
+    x_max = min(W, x2 + 2)
+    if x_max - x_min < 2:
+        return 0.0
+    crop = region_map[y_min:y_max, x_min:x_max]
+    mask = np.zeros_like(crop, dtype=np.uint8)
 
+    def _draw(pts, mask, x_off, y_off):
+        local = pts.copy()
+        local[:, 0] -= x_off
+        local[:, 1] -= y_off
+        for k in range(len(local) - 1):
+            p0 = tuple(local[k])
+            p1 = tuple(local[k + 1])
+            cv2.line(mask, p0, p1, color=1, thickness=3)
+    _draw(pts_top, mask, x_min, y_min)
+    _draw(pts_bot, mask, x_min, y_min)
+    xs_start = max(0, x1 - x_min)
+    xs_end = min(mask.shape[1], x2 - x_min)
+    if xs_end <= xs_start:
+        return 0.0
+    sub_mask = mask[:, xs_start:xs_end]
+    sub_crop = crop[:, xs_start:xs_end]
+    n = int(sub_mask.sum())
+    if n == 0:
+        return 0.0
+    return float((sub_mask * sub_crop).sum() / n)
 
-def maps_to_regions_structured(maps: np.ndarray,
-                               baseline_step: int = 4,
-                               baseline_thresh: float = 0.20,
-                               endpoint_weight: float = 0.0,
-                               h_dilate_px: int = 32,
-                               vertical_connection_range: int = 3,
-                               height_percentile: float = 50.0,
-                               separator_thresh: float = 0.15,
-                               nms_half_win: int = 2,
-                               col_gap_min_width: int = COL_GAP_MIN_WIDTH,
-                               legacy_fallback: bool = True) -> List[Region]:
-    structured = _maps_to_regions_structured_once(
-        maps,
-        baseline_step=baseline_step,
-        baseline_thresh=baseline_thresh,
-        endpoint_weight=endpoint_weight,
-        h_dilate_px=h_dilate_px,
-        vertical_connection_range=vertical_connection_range,
-        height_percentile=height_percentile,
-        separator_thresh=separator_thresh,
-        nms_half_win=nms_half_win,
-        col_gap_min_width=col_gap_min_width,
-    )
-    if not legacy_fallback:
-        return structured
+def _cluster_regions(lines: List[TextLine], region_map: np.ndarray, paragraph_threshold: float=0.15, x_overlap_min: int=5) -> List[List[TextLine]]:
+    if not lines:
+        return []
+    sorted_lines = sorted(lines, key=_line_center_y)
+    n = len(sorted_lines)
+    heights = [max(1.0, ln.heights[0] + ln.heights[1]) for ln in sorted_lines if sum(ln.heights) > 0]
+    median_h = float(np.median(heights)) if heights else 20.0
+    max_vertical_gap = 3.0 * median_h
+    x_ranges = [_line_x_range(ln) for ln in sorted_lines]
+    cys = [_line_center_y(ln) for ln in sorted_lines]
+    baselines_np = [np.asarray(ln.baseline, dtype=np.int32) for ln in sorted_lines]
+    descs = [ln.heights[1] for ln in sorted_lines]
+    ascs = [ln.heights[0] for ln in sorted_lines]
+    parent = list(range(n))
 
-    structured_n = _line_count(structured)
-    if structured_n < 20:
-        return structured
+    def find(x: int) -> int:
+        while parent[x] != x:
+            parent[x] = parent[parent[x]]
+            x = parent[x]
+        return x
 
-    legacy = _maps_to_regions_legacy(
-        maps,
-        baseline_step=baseline_step,
-        baseline_thresh=0.35,
-        h_dilate_px=12,
-        col_gap_min_width=col_gap_min_width,
-    )
-    legacy_n = _line_count(legacy)
-    primary_width_p90 = _line_width_percentile(structured, maps.shape[1])
+    def union(a: int, b: int) -> None:
+        ra, rb = (find(a), find(b))
+        if ra != rb:
+            parent[ra] = rb
+    for i in range(n):
+        xi0, xi1 = x_ranges[i]
+        cy_i = cys[i]
+        for j in range(i + 1, n):
+            cy_j = cys[j]
+            if cy_j - cy_i > max_vertical_gap:
+                break
+            xj0, xj1 = x_ranges[j]
+            x_overlap = max(0, min(xi1, xj1) - max(xi0, xj0))
+            if x_overlap < x_overlap_min:
+                continue
+            v_gap = abs(cy_j - cy_i)
+            shorter_span = max(1, min(xi1 - xi0, xj1 - xj0))
+            if v_gap < 0.5 * median_h and x_overlap > shorter_span * 0.5:
+                union(i, j)
+                continue
+            penalty = _path_penalty(baselines_np[i], baselines_np[j], shift_top=descs[i], shift_bot=-ascs[j], x1=max(xi0, xj0), x2=min(xi1, xj1), region_map=region_map)
+            if penalty < paragraph_threshold:
+                union(i, j)
+    groups: dict = defaultdict(list)
+    for i, ln in enumerate(sorted_lines):
+        groups[find(i)].append(ln)
+    return list(groups.values())
 
-    if (structured_n <= 95 and
-            primary_width_p90 < 0.62 and
-            1.25 * structured_n <= legacy_n <= 2.75 * structured_n and
-            legacy_n <= 140):
-        return legacy
-    return structured
+def _assemble_regions(line_groups: List[List[TextLine]]) -> List[Region]:
+    regions = []
+    for group in line_groups:
+        if not group:
+            continue
+        ordered = sorted(group, key=_line_center_y)
+        regions.append(Region(lines=ordered, polygon=_region_hull(ordered)))
+    return regions
+
+def _region_bbox(r: Region) -> Tuple[int, int, int, int]:
+    pts = r.polygon if r.polygon else [p for ln in r.lines for p in ln.polygon]
+    if not pts:
+        return (0, 0, 0, 0)
+    xs = [p[0] for p in pts]
+    ys = [p[1] for p in pts]
+    return (min(xs), min(ys), max(xs), max(ys))
+
+def _order_regions(regions: List[Region]) -> List[Region]:
+    if not regions:
+        return []
+    bboxes = [_region_bbox(r) for r in regions]
+    centers_x = [(bx[0] + bx[2]) / 2.0 for bx in bboxes]
+    widths = [max(1, bx[2] - bx[0]) for bx in bboxes]
+    median_w = float(np.median(widths))
+    order = sorted(range(len(regions)), key=lambda i: centers_x[i])
+    sorted_cx = [centers_x[i] for i in order]
+    buckets: List[List[int]] = []
+    threshold = 0.5 * median_w
+    for k, idx in enumerate(order):
+        if not buckets or sorted_cx[k] - sorted_cx[k - 1] > threshold:
+            buckets.append([idx])
+        else:
+            buckets[-1].append(idx)
+    out = []
+    for bucket in buckets:
+        bucket.sort(key=lambda i: bboxes[i][1])
+        for i in bucket:
+            out.append(regions[i])
+    return out
+
+def maps_to_regions(maps: np.ndarray) -> List[Region]:
+    binary_initial, median_asc = _binarize(maps)
+    lines = _extract_lines(maps, binary_initial, median_asc)
+    if not lines:
+        return []
+    reg_map = np.maximum(maps[:, :, 4], 0)
+    line_groups = _cluster_regions(lines, reg_map)
+    regions = _assemble_regions(line_groups)
+    return _order_regions(regions)

@@ -4,7 +4,8 @@ from xml.etree import ElementTree as ET
 
 
 def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
-               software_name: str = "tuzkaocr") -> str:
+               software_name: str = "tuzkaocr",
+               layout_name: str | None = None) -> str:
     alto = ET.Element("alto", {
         "xmlns": "http://www.loc.gov/standards/alto/ns-v4#",
         "xmlns:xsi": "http://www.w3.org/2001/XMLSchema-instance",
@@ -19,10 +20,20 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
     mu.text = "pixel"
 
     ocr_proc = ET.SubElement(desc, "OCRProcessing", {"ID": "IdOcr"})
+
+    now = datetime.now(timezone.utc).isoformat()
+
+    if layout_name:
+        layout_step = ET.SubElement(ocr_proc, "ocrProcessingStep")
+        ET.SubElement(layout_step, "processingDateTime").text = now
+        ET.SubElement(layout_step, "processingStepDescription").text = "layout"
+        layout_sw = ET.SubElement(layout_step, "processingSoftware")
+        ET.SubElement(layout_sw, "softwareCreator").text = "tuzkaocr"
+        ET.SubElement(layout_sw, "softwareName").text = layout_name
+
     step = ET.SubElement(ocr_proc, "ocrProcessingStep")
-    ET.SubElement(step, "processingDateTime").text = (
-        datetime.now(timezone.utc).isoformat()
-    )
+    ET.SubElement(step, "processingDateTime").text = now
+    ET.SubElement(step, "processingStepDescription").text = "recognition"
     sw = ET.SubElement(step, "processingSoftware")
     ET.SubElement(sw, "softwareCreator").text = "tuzkaocr"
     ET.SubElement(sw, "softwareName").text = software_name
