@@ -61,6 +61,10 @@ rec-E-v4k7.int8.onnx
 
 The resulting ALTO XML records both the layout and recognition models under `<OCRProcessing>/<ocrProcessingStep>` entries (`<processingStepDescription>` = `layout` / `recognition`), so downstream consumers see the explicit provenance pair, e.g. `dec-A-v4` + `rec-E-v5.int8` for default, or `dec-A-v3k5` + `rec-E-v4k7.int8` for Kramarky.
 
+## Platform support
+
+Linux, Windows, and Apple Silicon macOS are supported. **Intel Macs are not** — upstream `onnxruntime` no longer ships x86_64 macOS wheels (1.18+ are arm64-only), so `pip install` will fail. Use the Docker CPU image instead.
+
 ## Docker Deployment
 
 Build and run the CPU API service:
