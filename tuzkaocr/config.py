@@ -46,6 +46,9 @@ class Config:
 
     adaptive_downsample: bool = field(default_factory=lambda: _env("ADAPTIVE_DOWNSAMPLE", True))
 
+    role_classifier: bool = field(default_factory=lambda: _env("ROLE_CLASSIFIER", False))
+    role_model:      str  = field(default_factory=lambda: _env("ROLE_MODEL", "role-G-v1.npz"))
+
     results_dir:        str = field(default_factory=lambda: _env("RESULTS_DIR",        "results"))
     max_job_age_hours:  int = field(default_factory=lambda: _env("MAX_JOB_AGE_HOURS",  24))
 

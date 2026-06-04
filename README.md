@@ -194,6 +194,8 @@ TUZKAOCR_LINE_WORKERS=4             # OCR threads per page
 TUZKAOCR_PAGE_WORKERS=2             # API/background or batch workers
 TUZKAOCR_HEIGHT_SCALE=1.0           # line-height multiplier
 TUZKAOCR_ADAPTIVE_DOWNSAMPLE=true   # true = recover dense pages via adaptive downsampling
+TUZKAOCR_ROLE_CLASSIFIER=false      # true = tag each ALTO TextLine with role (body/heading/...)
+TUZKAOCR_ROLE_MODEL=role-G-v1.npz   # bundled role classifier model
 TUZKAOCR_RESULTS_DIR=results        # stored API results
 TUZKAOCR_MAX_JOB_AGE_HOURS=24       # result cleanup age (in-memory jobs + disk files)
 TUZKAOCR_MAX_QUEUE=16               # max simultaneous queued+running jobs (503 above this)
@@ -215,6 +217,28 @@ TUZKAOCR_ADAPTIVE_DOWNSAMPLE=true   # default; set false for fixed single-pass l
 ```
 
 The CLI exposes `--no-adaptive` to force the fixed single-pass path.
+
+## Line role classification (experimental)
+
+Off by default. When enabled, every recognized line is tagged with one of `body`, `prominent` (title / heading), `pagenum`, or `header` (running page header), and the role surfaces as a `TYPE` attribute on each `<TextLine>` in the ALTO output.
+
+It runs once per page after OCR completes; cost is well under 5 ms per typical page.
+
+Three ways to enable, identical effect:
+
+```text
+TUZKAOCR_ROLE_CLASSIFIER=true       # server-wide default (env)
+```
+
+```bash
+python cli.py page.jpg --role-classifier --format alto   # per-invocation (CLI)
+```
+
+```bash
+curl -F image=@page.jpg -F role_classifier=true http://localhost:8000/api/v1/process   # per-request (API)
+```
+
+The classifier prefers silence over wrong markup: when it isn't confident, the line stays `body`. Mistakes show up as a missing role tag, never an incorrect one.
 
 ## Authentication
 

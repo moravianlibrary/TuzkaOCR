@@ -66,11 +66,15 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
         })
 
         for li, line in enumerate(lines):
-            tl = ET.SubElement(tb, "TextLine", {
+            attrs = {
                 "ID": f"line_{bi}_{li}",
                 "HPOS": str(line["hpos"]), "VPOS": str(line["vpos"]),
                 "WIDTH": str(line["width"]), "HEIGHT": str(line["height"]),
-            })
+            }
+            role = line.get("role")
+            if role:
+                attrs["TYPE"] = role
+            tl = ET.SubElement(tb, "TextLine", attrs)
             for wi, (word, wh, wv, ww, wht) in enumerate(line["words"]):
                 ET.SubElement(tl, "String", {
                     "ID": f"word_{bi}_{li}_{wi}",

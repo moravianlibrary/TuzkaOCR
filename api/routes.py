@@ -134,7 +134,8 @@ async def _read_upload(upload: UploadFile, spool_dir: Optional[str] = None) -> b
 
 def _submit(request: Request, img: np.ndarray, page_id: str,
             domain: Optional[str], height_scale: Optional[float],
-            caller: Optional[str], fmt: Optional[str] = None) -> str:
+            caller: Optional[str], fmt: Optional[str] = None,
+            role_classifier: Optional[bool] = None) -> str:
     domain = _validate_domain(domain)
     fmt = _validate_fmt(fmt)
     cache = request.app.state.cache
@@ -145,7 +146,9 @@ def _submit(request: Request, img: np.ndarray, page_id: str,
     print(f"{who}submitted job for {page_id!r} domain={domain or 'default'} fmt={fmt}", flush=True)
 
     def work():
-        return processor.process(img, page_id=page_id, fmt=fmt, height_scale=height_scale)
+        return processor.process(img, page_id=page_id, fmt=fmt,
+                                 height_scale=height_scale,
+                                 role_classifier=role_classifier)
 
     result_ext = ".txt" if fmt == "txt" else ".xml"
     try:
@@ -192,13 +195,15 @@ def _reject_if_full(request: Request) -> None:
 
 async def _ingest_upload(request: Request, upload: UploadFile,
                          domain: Optional[str], height_scale: Optional[float],
-                         fmt: Optional[str], caller_name: Optional[str]) -> str:
+                         fmt: Optional[str], role_classifier: Optional[bool],
+                         caller_name: Optional[str]) -> str:
     _reject_if_full(request)
     cfg = request.app.state.config
     data = await _read_upload(upload, cfg.spool_dir)
     img = _decode_image(data, cfg.max_image_pixels)
     return _submit(request, img, upload.filename or "page",
-                   domain, height_scale, caller=caller_name, fmt=fmt)
+                   domain, height_scale, caller=caller_name, fmt=fmt,
+                   role_classifier=role_classifier)
 
 
 @router.post("/api/v1/process")
@@ -208,9 +213,11 @@ async def process_image(
     domain: Optional[str] = Form(None),
     height_scale: Optional[float] = Form(None),
     fmt: Optional[str] = Form(None),
+    role_classifier: Optional[bool] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
-    job_id = await _ingest_upload(request, image, domain, height_scale, fmt, caller_name)
+    job_id = await _ingest_upload(request, image, domain, height_scale, fmt,
+                                  role_classifier, caller_name)
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -258,9 +265,11 @@ async def upload_legacy(
     domain: Optional[str] = Form(None),
     height_scale: Optional[float] = Form(None),
     fmt: Optional[str] = Form(None),
+    role_classifier: Optional[bool] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
-    job_id = await _ingest_upload(request, file, domain, height_scale, fmt, caller_name)
+    job_id = await _ingest_upload(request, file, domain, height_scale, fmt,
+                                  role_classifier, caller_name)
     return {"id": job_id}
 
 

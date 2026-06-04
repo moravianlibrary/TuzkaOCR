@@ -31,4 +31,4 @@ where = ["."]
 include = ["tuzkaocr*", "api*"]
 
 [tool.setuptools.package-data]
-"tuzkaocr.models" = ["*.onnx", "*.json", "LICENSE"]
+"tuzkaocr.models" = ["*.onnx", "*.json", "*.npz", "LICENSE"]

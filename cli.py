@@ -61,6 +61,9 @@ def main() -> None:
     p.add_argument("--no-adaptive", dest="adaptive", action="store_false",
                    help="Disable adaptive downsampling (use fixed DS3 layout)")
     p.set_defaults(adaptive=True)
+    p.add_argument("--role-classifier", dest="role_classifier", action="store_true",
+                   help="Tag each line with role (body/prominent/pagenum/header) in ALTO TYPE attr")
+    p.set_defaults(role_classifier=False)
 
     args = p.parse_args()
 
@@ -83,6 +86,7 @@ def main() -> None:
         page_workers  = args.workers,
         height_scale  = args.height_scale,
         adaptive_downsample = args.adaptive,
+        role_classifier = args.role_classifier,
     )
 
     if not args.batch:

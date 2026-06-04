@@ -12,6 +12,7 @@ from . import _models
 from .config import Config
 from .layout.detector import LayoutDetector
 from .layout import adaptive
+from .layout.role import RoleClassifier
 from .ocr.recognizer import OnnxRecognizer
 from .alto import build_alto
 
@@ -160,6 +161,7 @@ class PageProcessor:
         )
         self._ocr_model_path = ocr_path
         self._layout_model_path = layout_path
+        self._role: Optional[RoleClassifier] = None
 
     def _detect_ocr(self, img_bgr: np.ndarray, hs: float,
                     downsample: Optional[int]) -> dict:
@@ -211,31 +213,41 @@ class PageProcessor:
         return [{"lines": region_blocks[ri]} for ri in sorted(region_blocks)]
 
     def _run(self, img_bgr: np.ndarray,
-             height_scale: Optional[float] = None) -> Tuple[int, int, List[dict]]:
+             height_scale: Optional[float] = None,
+             role_classifier: Optional[bool] = None) -> Tuple[int, int, List[dict]]:
         img_h, img_w = img_bgr.shape[:2]
         cfg = self.config
         hs = cfg.height_scale if height_scale is None else height_scale
 
         if not cfg.adaptive_downsample:
             r = self._detect_ocr(img_bgr, hs, None)
-            return img_h, img_w, self._assemble_blocks(r["line_data"], r["results"])
+            blocks = self._assemble_blocks(r["line_data"], r["results"])
+        else:
+            visited = []
+            for k, ds in enumerate(adaptive.DS_LEVELS):
+                r = self._detect_ocr(img_bgr, hs, ds)
+                visited.append({"ds": ds, "conf": r["mean_conf"],
+                                "n_lines": r["n_lines"], "pitch": r["pitch"], "r": r})
+                if k == len(adaptive.DS_LEVELS) - 1:
+                    break
+                if not adaptive.starved(r["pitch"], r["mean_conf"]):
+                    break
+            chosen = adaptive.choose(visited)["r"]
+            blocks = self._assemble_blocks(chosen["line_data"], chosen["results"])
 
-        visited = []
-        for k, ds in enumerate(adaptive.DS_LEVELS):
-            r = self._detect_ocr(img_bgr, hs, ds)
-            visited.append({"ds": ds, "conf": r["mean_conf"],
-                            "n_lines": r["n_lines"], "pitch": r["pitch"], "r": r})
-            if k == len(adaptive.DS_LEVELS) - 1:
-                break
-            if not adaptive.starved(r["pitch"], r["mean_conf"]):
-                break
+        use_role = cfg.role_classifier if role_classifier is None else role_classifier
+        if use_role:
+            if self._role is None:
+                self._role = RoleClassifier(str(_models.resolve(cfg.role_model)))
+            self._role.classify_blocks(blocks, img_h, img_w)
 
-        chosen = adaptive.choose(visited)["r"]
-        return img_h, img_w, self._assemble_blocks(chosen["line_data"], chosen["results"])
+        return img_h, img_w, blocks
 
     def process(self, img_bgr: np.ndarray, page_id: str = "page",
-                fmt: str = "alto", height_scale: Optional[float] = None) -> str:
-        img_h, img_w, blocks = self._run(img_bgr, height_scale=height_scale)
+                fmt: str = "alto", height_scale: Optional[float] = None,
+                role_classifier: Optional[bool] = None) -> str:
+        img_h, img_w, blocks = self._run(img_bgr, height_scale=height_scale,
+                                         role_classifier=role_classifier)
         if fmt == "txt":
             return _blocks_to_text(blocks)
         software_name = self._ocr_model_path.stem
