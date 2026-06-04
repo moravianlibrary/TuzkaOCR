@@ -28,30 +28,36 @@ def _nms_baseline_subtract_endpoints(prob: np.ndarray, endpoint_prob: np.ndarray
     nms = prob * (prob >= local_max - 1e-06)
     return (nms - endpoint_weight * endpoint_prob > threshold).astype(np.uint8)
 
-def _extract_baseline_points(mask: np.ndarray, step: int=4) -> List[Tuple[int, int]]:
-    ys, xs = np.where(mask)
-    if len(xs) == 0:
+def _baseline_points_from_xy(ys: np.ndarray, xs: np.ndarray, step: int=4) -> List[Tuple[int, int]]:
+    if xs.size == 0:
         return []
-    x_min, x_max = (int(xs.min()), int(xs.max()))
-    points = []
-    for x in range(x_min, x_max + 1, step):
-        col_ys = ys[xs == x]
-        if len(col_ys) == 0:
+    x_min = int(xs.min())
+    x_max = int(xs.max())
+    order = np.argsort(xs, kind="stable")
+    xs_s = xs[order]
+    ys_s = ys[order]
+    starts = np.concatenate(([0], np.flatnonzero(np.diff(xs_s)) + 1))
+    ends = np.concatenate((starts[1:], [xs_s.size]))
+    uniq_x = xs_s[starts]
+    targets = np.arange(x_min, x_max + 1, step, dtype=xs.dtype)
+    idx = np.searchsorted(uniq_x, targets)
+    safe_idx = np.clip(idx, 0, uniq_x.size - 1)
+    hit = (idx < uniq_x.size) & (uniq_x[safe_idx] == targets)
+    pts: List[Tuple[int, int]] = []
+    for t, h, i in zip(targets.tolist(), hit.tolist(), idx.tolist()):
+        if not h:
             continue
-        points.append((x, int(np.median(col_ys))))
-    if points and points[0][0] != x_min:
-        col_ys = ys[xs == x_min]
-        if len(col_ys):
-            points.insert(0, (x_min, int(np.median(col_ys))))
-    if points and points[-1][0] != x_max:
-        col_ys = ys[xs == x_max]
-        if len(col_ys):
-            points.append((x_max, int(np.median(col_ys))))
-    return sorted(points, key=lambda p: p[0])
+        seg = ys_s[starts[i]:ends[i]]
+        pts.append((int(t), int(np.median(seg))))
+    if pts and pts[-1][0] != x_max:
+        i = uniq_x.size - 1
+        seg = ys_s[starts[i]:ends[i]]
+        pts.append((int(x_max), int(np.median(seg))))
+    return pts
 
-def _sample_component_heights(mask: np.ndarray, asc_map: np.ndarray, desc_map: np.ndarray, percentile: float=70.0) -> Tuple[float, float]:
-    ys, xs = np.where(mask)
-    if len(xs) == 0:
+
+def _sample_heights_from_xy(ys: np.ndarray, xs: np.ndarray, asc_map: np.ndarray, desc_map: np.ndarray, percentile: float=70.0) -> Tuple[float, float]:
+    if xs.size == 0:
         return (10.0, 5.0)
     ascs = np.maximum(asc_map[ys, xs], 0)
     descs = np.maximum(desc_map[ys, xs], 0)
@@ -133,12 +139,26 @@ def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: flo
     min_asc_poly = max(1.0, median_asc * 0.5)
     min_desc_poly = max(1.0, median_asc * 0.4)
     H_map, W_map = binary.shape
+
+    ys_all, xs_all = np.where(labels > 0)
+    if ys_all.size == 0:
+        return []
+    lids_all = labels[ys_all, xs_all]
+    order = np.argsort(lids_all, kind="stable")
+    lids_sorted = lids_all[order]
+    ys_sorted = ys_all[order]
+    xs_sorted = xs_all[order]
+    lab_starts = np.concatenate(([0], np.flatnonzero(np.diff(lids_sorted)) + 1))
+    lab_ends = np.concatenate((lab_starts[1:], [lids_sorted.size]))
+
     lines: List[TextLine] = []
-    for lid in range(1, num):
-        comp_mask = (labels == lid).astype(np.uint8)
-        if comp_mask.sum() < min_pixels:
+    for k in range(lab_starts.size):
+        s, e = int(lab_starts[k]), int(lab_ends[k])
+        if e - s < min_pixels:
             continue
-        pts = _extract_baseline_points(comp_mask, step=4)
+        ys_lab = ys_sorted[s:e]
+        xs_lab = xs_sorted[s:e]
+        pts = _baseline_points_from_xy(ys_lab, xs_lab, step=4)
         if len(pts) < 2:
             continue
         (x0, y0), (x1, y1) = (pts[0], pts[1])
@@ -152,7 +172,7 @@ def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: flo
         ex1 = min(W_map - 1, int(xb + dxe / ne * extend))
         ey1 = int(yb + dye / ne * extend)
         pts = [(ex0, max(0, min(H_map - 1, ey0)))] + pts + [(ex1, max(0, min(H_map - 1, ey1)))]
-        asc, desc = _sample_component_heights(comp_mask, asc_h, desc_h, percentile=70.0)
+        asc, desc = _sample_heights_from_xy(ys_lab, xs_lab, asc_h, desc_h, percentile=70.0)
         poly = _baseline_to_polygon_normal(pts, asc, desc, min_asc=min_asc_poly, min_desc=min_desc_poly)
         lines.append(TextLine(baseline=pts, polygon=poly, heights=(asc, desc)))
     return lines
