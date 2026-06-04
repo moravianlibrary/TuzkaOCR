@@ -10,13 +10,16 @@ from pathlib import Path
 from typing import Callable, Literal, Optional
 
 
+_FMT_EXT = {"alto": ".xml", "txt": ".txt"}
+
+
 @dataclass
 class Job:
     id: str
     status: Literal["queued", "running", "done", "failed"]
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     finished_at: Optional[datetime] = None
-    result_path: Optional[Path] = None
+    result_paths: list[Path] = field(default_factory=list)
     error: Optional[str] = None
 
 
@@ -43,7 +46,7 @@ class JobStore:
         return sum(1 for j in self._jobs.values()
                    if j.status in ("queued", "running"))
 
-    def submit(self, process_fn: Callable[[], str], result_ext: str = ".xml") -> str:
+    def submit(self, process_fn: Callable[[], object], result_ext: str = ".xml") -> str:
         with self._lock:
             active = self._active_count()
             if active >= self._max_queue:
@@ -55,7 +58,7 @@ class JobStore:
         self._executor.submit(self._run, job_id, process_fn, result_ext)
         return job_id
 
-    def _run(self, job_id: str, process_fn: Callable[[], str],
+    def _run(self, job_id: str, process_fn: Callable[[], object],
              result_ext: str = ".xml") -> None:
         with self._lock:
             job = self._jobs.get(job_id)
@@ -63,14 +66,25 @@ class JobStore:
                 job.status = "running"
         try:
             result = process_fn()
-            result_path = self._results_dir / f"{job_id}{result_ext}"
-            result_path.write_text(result, encoding="utf-8")
+            paths: list[Path] = []
+            if isinstance(result, dict):
+                for key, content in result.items():
+                    ext = _FMT_EXT.get(key)
+                    if ext is None:
+                        raise ValueError(f"Unknown multi-output key {key!r}")
+                    p = self._results_dir / f"{job_id}{ext}"
+                    p.write_text(content, encoding="utf-8")
+                    paths.append(p)
+            else:
+                p = self._results_dir / f"{job_id}{result_ext}"
+                p.write_text(result, encoding="utf-8")
+                paths.append(p)
             with self._lock:
                 job = self._jobs.get(job_id)
                 if job:
                     job.status       = "done"
                     job.finished_at  = datetime.now(timezone.utc)
-                    job.result_path  = result_path
+                    job.result_paths = paths
         except Exception as exc:
             with self._lock:
                 job = self._jobs.get(job_id)
@@ -87,11 +101,22 @@ class JobStore:
         with self._lock:
             return self._jobs.get(job_id)
 
-    def get_result_path(self, job_id: str) -> Optional[Path]:
+    def get_result_path(self, job_id: str, which: Optional[str] = None) -> Optional[Path]:
+        target_ext = _FMT_EXT.get(which) if which else None
         with self._lock:
             job = self._jobs.get(job_id)
-            if job and job.result_path and job.result_path.exists():
-                return job.result_path
+            if job and job.result_paths:
+                if target_ext:
+                    for p in job.result_paths:
+                        if p.suffix == target_ext and p.exists():
+                            return p
+                else:
+                    for p in job.result_paths:
+                        if p.exists():
+                            return p
+        if target_ext:
+            p = self._results_dir / f"{job_id}{target_ext}"
+            return p if p.exists() else None
         for ext in (".xml", ".txt"):
             p = self._results_dir / f"{job_id}{ext}"
             if p.exists():
@@ -114,8 +139,9 @@ class JobStore:
             ]
             for jid in to_delete:
                 job = self._jobs.pop(jid)
-                if job.result_path and job.result_path.exists():
-                    job.result_path.unlink(missing_ok=True)
+                for p in job.result_paths:
+                    if p.exists():
+                        p.unlink(missing_ok=True)
                 removed += 1
         removed += self._sweep_orphans()
         return removed

@@ -9,7 +9,7 @@ from typing import Optional
 import cv2
 import numpy as np
 import yaml
-from fastapi import APIRouter, Depends, Form, HTTPException, Request, Security, UploadFile, File
+from fastapi import APIRouter, Depends, Form, HTTPException, Query, Request, Security, UploadFile, File
 from fastapi.responses import PlainTextResponse
 from fastapi.security.api_key import APIKeyHeader
 
@@ -17,7 +17,8 @@ from tuzkaocr import _models
 from tuzkaocr.jobs import JobStoreFull
 
 ALLOWED_DOMAINS = {"kramarky"}
-ALLOWED_FMTS = {"alto", "txt"}
+ALLOWED_FMTS = {"alto", "txt", "multi"}
+ALLOWED_WHICH = {"alto", "txt"}
 SPOOL_MAX_SIZE = 8 * 1024 * 1024
 
 router = APIRouter()
@@ -133,7 +134,7 @@ async def _read_upload(upload: UploadFile, spool_dir: Optional[str] = None) -> b
 
 
 def _submit(request: Request, img: np.ndarray, page_id: str,
-            domain: Optional[str], height_scale: Optional[float],
+            domain: Optional[str],
             caller: Optional[str], fmt: Optional[str] = None,
             role_classifier: Optional[bool] = None) -> str:
     domain = _validate_domain(domain)
@@ -147,7 +148,6 @@ def _submit(request: Request, img: np.ndarray, page_id: str,
 
     def work():
         return processor.process(img, page_id=page_id, fmt=fmt,
-                                 height_scale=height_scale,
                                  role_classifier=role_classifier)
 
     result_ext = ".txt" if fmt == "txt" else ".xml"
@@ -194,7 +194,7 @@ def _reject_if_full(request: Request) -> None:
 
 
 async def _ingest_upload(request: Request, upload: UploadFile,
-                         domain: Optional[str], height_scale: Optional[float],
+                         domain: Optional[str],
                          fmt: Optional[str], role_classifier: Optional[bool],
                          caller_name: Optional[str]) -> str:
     _reject_if_full(request)
@@ -202,7 +202,7 @@ async def _ingest_upload(request: Request, upload: UploadFile,
     data = await _read_upload(upload, cfg.spool_dir)
     img = _decode_image(data, cfg.max_image_pixels)
     return _submit(request, img, upload.filename or "page",
-                   domain, height_scale, caller=caller_name, fmt=fmt,
+                   domain, caller=caller_name, fmt=fmt,
                    role_classifier=role_classifier)
 
 
@@ -211,12 +211,11 @@ async def process_image(
     request: Request,
     image: UploadFile = File(...),
     domain: Optional[str] = Form(None),
-    height_scale: Optional[float] = Form(None),
     fmt: Optional[str] = Form(None),
     role_classifier: Optional[bool] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
-    job_id = await _ingest_upload(request, image, domain, height_scale, fmt,
+    job_id = await _ingest_upload(request, image, domain, fmt,
                                   role_classifier, caller_name)
     return {"job_id": job_id, "status": "queued"}
 
@@ -236,7 +235,12 @@ async def get_status(job_id: str, request: Request, caller_name: Optional[str] =
     }
 
 
-def _result_response(store, job_id: str) -> PlainTextResponse:
+def _result_response(store, job_id: str, which: Optional[str] = None) -> PlainTextResponse:
+    if which is not None and which not in ALLOWED_WHICH:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown which '{which}'. Allowed: {sorted(ALLOWED_WHICH)}",
+        )
     job = store.get(job_id)
     if job is not None:
         if job.status == "failed":
@@ -245,7 +249,7 @@ def _result_response(store, job_id: str) -> PlainTextResponse:
             raise HTTPException(status_code=404, detail="Job not found")
         if job.status != "done":
             raise HTTPException(status_code=202, detail=f"Job status: {job.status}")
-    path = store.get_result_path(job_id)
+    path = store.get_result_path(job_id, which)
     if path is None:
         raise HTTPException(status_code=404, detail="Result not found")
     content = path.read_text(encoding="utf-8")
@@ -254,8 +258,10 @@ def _result_response(store, job_id: str) -> PlainTextResponse:
 
 
 @router.get("/api/v1/result/{job_id}", response_class=PlainTextResponse)
-async def get_result(job_id: str, request: Request, caller_name: Optional[str] = Depends(_require_key)):
-    return _result_response(request.app.state.store, job_id)
+async def get_result(job_id: str, request: Request,
+                     which: Optional[str] = Query(None),
+                     caller_name: Optional[str] = Depends(_require_key)):
+    return _result_response(request.app.state.store, job_id, which)
 
 
 @router.post("/upload")
@@ -263,12 +269,11 @@ async def upload_legacy(
     request: Request,
     file: UploadFile = File(...),
     domain: Optional[str] = Form(None),
-    height_scale: Optional[float] = Form(None),
     fmt: Optional[str] = Form(None),
     role_classifier: Optional[bool] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
-    job_id = await _ingest_upload(request, file, domain, height_scale, fmt,
+    job_id = await _ingest_upload(request, file, domain, fmt,
                                   role_classifier, caller_name)
     return {"id": job_id}
 
@@ -287,5 +292,7 @@ async def status_legacy(job_id: str, request: Request, caller_name: Optional[str
 
 
 @router.get("/download/{job_id}", response_class=PlainTextResponse)
-async def download_legacy(job_id: str, request: Request, caller_name: Optional[str] = Depends(_require_key)):
-    return _result_response(request.app.state.store, job_id)
+async def download_legacy(job_id: str, request: Request,
+                          which: Optional[str] = Query(None),
+                          caller_name: Optional[str] = Depends(_require_key)):
+    return _result_response(request.app.state.store, job_id, which)

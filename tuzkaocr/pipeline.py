@@ -245,18 +245,24 @@ class PageProcessor:
 
     def process(self, img_bgr: np.ndarray, page_id: str = "page",
                 fmt: str = "alto", height_scale: Optional[float] = None,
-                role_classifier: Optional[bool] = None) -> str:
+                role_classifier: Optional[bool] = None):
         img_h, img_w, blocks = self._run(img_bgr, height_scale=height_scale,
                                          role_classifier=role_classifier)
-        if fmt == "txt":
-            return _blocks_to_text(blocks)
         software_name = self._ocr_model_path.stem
         layout_name = self._layout_model_path.stem
+        if fmt == "multi":
+            return {
+                "alto": build_alto(page_id, img_h, img_w, blocks,
+                                   software_name=software_name, layout_name=layout_name),
+                "txt":  _blocks_to_text(blocks),
+            }
+        if fmt == "txt":
+            return _blocks_to_text(blocks)
         return build_alto(page_id, img_h, img_w, blocks,
                           software_name=software_name, layout_name=layout_name)
 
     def process_file(self, image_path: str | Path, out_path: str | Path | None = None,
-                     fmt: str = "alto") -> str:
+                     fmt: str = "alto"):
         img_path = Path(image_path)
         img = cv2.imread(str(img_path))
         if img is None:
@@ -266,6 +272,20 @@ class PageProcessor:
         result = self.process(img, page_id=img_path.stem, fmt=fmt)
 
         if out_path is not None:
-            Path(out_path).write_text(result, encoding="utf-8")
+            if isinstance(result, dict):
+                stem = _strip_multi_suffix(Path(out_path))
+                _MULTI_SUFFIX = {"alto": ".alto.xml", "txt": ".txt"}
+                for key, content in result.items():
+                    Path(f"{stem}{_MULTI_SUFFIX[key]}").write_text(content, encoding="utf-8")
+            else:
+                Path(out_path).write_text(result, encoding="utf-8")
 
         return result
+
+
+def _strip_multi_suffix(p: Path) -> str:
+    name = p.name
+    for suf in (".alto.xml", ".xml", ".txt"):
+        if name.endswith(suf):
+            return str(p.parent / name[:-len(suf)])
+    return str(p)

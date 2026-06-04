@@ -35,8 +35,8 @@ def main() -> None:
     p.add_argument("input", help="Image file or directory (with --batch)")
     p.add_argument("--out",      default=None,    help="Output file path (single image)")
     p.add_argument("--out-dir",  default="results", help="Output directory (batch mode)")
-    p.add_argument("--format",   choices=["alto", "txt"], default="alto",
-                   help="Output format: alto (ALTO XML) or txt (plain text)")
+    p.add_argument("--format",   choices=["alto", "txt", "multi"], default="alto",
+                   help="Output format: alto (ALTO XML), txt (plain text), or multi (both)")
     p.add_argument("--batch",    action="store_true", help="Process all images in a directory")
     p.add_argument("--workers",  type=int, default=2, help="Parallel page workers (batch)")
 
@@ -96,14 +96,22 @@ def main() -> None:
         processor = PageProcessor(cfg)
 
         img_path = Path(args.input)
-        suffix = ".txt" if args.format == "txt" else ".alto.xml"
-        out_path = Path(args.out) if args.out else img_path.with_suffix(suffix)
+        suffix_map = {"alto": ".alto.xml", "txt": ".txt", "multi": ""}
+        if args.format == "multi":
+            out_path = Path(args.out) if args.out else img_path.with_suffix("")
+        else:
+            out_path = Path(args.out) if args.out else img_path.with_suffix(suffix_map[args.format])
 
         t0 = time.time()
         result = processor.process_file(img_path, out_path=out_path, fmt=args.format)
         elapsed = time.time() - t0
 
-        if args.format == "txt":
+        if args.format == "multi":
+            n_lines = result["txt"].count("\n")
+            n_strings = result["alto"].count("<String ")
+            print(f"Done in {elapsed:.1f}s — {n_strings} words, {n_lines} lines → "
+                  f"{out_path}.alto.xml, {out_path}.txt", flush=True)
+        elif args.format == "txt":
             n_lines = result.count("\n")
             print(f"Done in {elapsed:.1f}s — {n_lines} lines → {out_path}", flush=True)
         else:
@@ -123,9 +131,10 @@ def main() -> None:
 
         print(f"Processing {len(images)} images with {args.workers} worker(s)...", flush=True)
 
-        suffix = ".txt" if args.format == "txt" else ".alto.xml"
+        suffix_map = {"alto": ".alto.xml", "txt": ".txt", "multi": ""}
+        suffix = suffix_map[args.format]
         tasks = [
-            (str(img), str(out_dir / img.with_suffix(suffix).name), args.format)
+            (str(img), str(out_dir / (img.stem + suffix)), args.format)
             for img in images
         ]
 

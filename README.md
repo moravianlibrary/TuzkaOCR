@@ -95,7 +95,7 @@ curl http://localhost:8000/healthz
 
 ## API Usage
 
-Per-request form fields: `image` (file), `domain` (`kramarky` or omitted), `height_scale` (float), `fmt` (`alto` or `txt`). The server picks model files from its own configuration — clients cannot supply model paths. Submitting more than `TUZKAOCR_MAX_QUEUE` simultaneous jobs returns **503** with a `Retry-After` header.
+Per-request form fields: `image` (file), `domain` (`kramarky` or omitted), `fmt` (`alto`, `txt`, or `multi`), `role_classifier` (bool, optional). With `fmt=multi` the server produces both ALTO XML and plain text from a single OCR pass; choose which to download with the `?which=alto|txt` query parameter on the result endpoint (defaults to `alto`). The server picks model files from its own configuration — clients cannot supply model paths. Submitting more than `TUZKAOCR_MAX_QUEUE` simultaneous jobs returns **503** with a `Retry-After` header.
 
 Submit an image for ALTO XML output:
 
@@ -123,6 +123,15 @@ Download result:
 
 ```bash
 curl -o result.txt http://localhost:8000/api/v1/result/JOB_ID
+```
+
+Submit one image and grab both ALTO and TXT in a single OCR pass:
+
+```bash
+JOB=$(curl -s -F "image=@page.jpg" -F "fmt=multi" \
+        http://localhost:8000/api/v1/process | jq -r .job_id)
+curl -o result.alto.xml "http://localhost:8000/api/v1/result/$JOB"            # default: alto
+curl -o result.txt      "http://localhost:8000/api/v1/result/$JOB?which=txt"  # plain text
 ```
 
 List available models:
@@ -155,6 +164,13 @@ Single image to plain text:
 
 ```bash
 python cli.py page.jpg --format txt --out result.txt
+```
+
+Single image to both ALTO XML and plain text in one pass (`--out` is a stem; suffixes are appended):
+
+```bash
+python cli.py page.jpg --format multi --out page
+# writes page.alto.xml and page.txt
 ```
 
 Batch directory to plain text with Kramarky models:
