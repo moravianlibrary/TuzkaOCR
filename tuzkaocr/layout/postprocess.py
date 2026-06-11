@@ -115,6 +115,36 @@ def _binarize(maps: np.ndarray, half_win: int=1, threshold: float=0.35, endpoint
     median_asc = float(np.median(asc_samples))
     return (binary, median_asc)
 
+def _gutter_columns(binary: np.ndarray) -> List[int]:
+    col = binary.sum(axis=0).astype(np.float64)
+    nz = np.where(col > 0)[0]
+    if nz.size < 10:
+        return []
+    a, b = int(nz[0]), int(nz[-1])
+    width = b - a
+    if width < 60:
+        return []
+    k = max(3, width // 80)
+    sm = np.convolve(col, np.ones(k) / k, mode="same")
+    content = col[a:b + 1]
+    ref = float(np.median(content[content > 0])) if np.any(content > 0) else 0.0
+    if ref <= 0:
+        return []
+    lo = a + int(0.18 * width)
+    hi = a + int(0.82 * width)
+    if hi <= lo:
+        return []
+    flank = max(8, width // 6)
+    gutters = []
+    g = lo + int(np.argmin(sm[lo:hi]))
+    if sm[g] < 0.45 * ref:
+        left_peak = float(sm[max(a, g - flank):g].max()) if g > a else 0.0
+        right_peak = float(sm[g + 1:min(b + 1, g + flank)].max()) if g < b else 0.0
+        if left_peak > 2.0 * max(sm[g], 1e-6) and right_peak > 2.0 * max(sm[g], 1e-6):
+            gutters.append(g)
+    return gutters
+
+
 def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: float, threshold: float=0.35, endpoint_weight: float=0.5) -> List[TextLine]:
     base_map = maps[:, :, 2]
     ep_map = maps[:, :, 3]
@@ -131,6 +161,8 @@ def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: flo
     binary = _nms_baseline_subtract_endpoints(base_map, ep_map, half_win=nms_half_win, threshold=threshold, endpoint_weight=endpoint_weight)
     kernel = np.ones((v_dilate, 2 * h_dilate + 1), dtype=np.uint8)
     dilated = cv2.dilate(binary, kernel, iterations=1)
+    for g in _gutter_columns(binary):
+        dilated[:, max(0, g - h_dilate - 1):g + h_dilate + 2] = 0
     num, labels = cv2.connectedComponents(dilated, connectivity=8)
     labels = labels * binary.astype(labels.dtype)
     asc_h = ndi.grey_dilation(maps[:, :, 0], size=(5, 1))
@@ -287,24 +319,81 @@ def _order_regions(regions: List[Region]) -> List[Region]:
     if not regions:
         return []
     bboxes = [_region_bbox(r) for r in regions]
-    centers_x = [(bx[0] + bx[2]) / 2.0 for bx in bboxes]
-    widths = [max(1, bx[2] - bx[0]) for bx in bboxes]
-    median_w = float(np.median(widths))
-    order = sorted(range(len(regions)), key=lambda i: centers_x[i])
-    sorted_cx = [centers_x[i] for i in order]
-    buckets: List[List[int]] = []
-    threshold = 0.5 * median_w
-    for k, idx in enumerate(order):
-        if not buckets or sorted_cx[k] - sorted_cx[k - 1] > threshold:
-            buckets.append([idx])
-        else:
-            buckets[-1].append(idx)
+    order = sorted(range(len(regions)), key=lambda i: bboxes[i][1])
+    bands: List[List[int]] = []
+    for i in order:
+        y0, y1 = bboxes[i][1], bboxes[i][3]
+        placed = False
+        for band in bands:
+            by0 = min(bboxes[k][1] for k in band)
+            by1 = max(bboxes[k][3] for k in band)
+            ov = min(y1, by1) - max(y0, by0)
+            if ov > 0.5 * max(1, min(y1 - y0, by1 - by0)):
+                band.append(i)
+                placed = True
+                break
+        if not placed:
+            bands.append([i])
     out = []
-    for bucket in buckets:
-        bucket.sort(key=lambda i: bboxes[i][1])
-        for i in bucket:
+    for band in bands:
+        widths = sorted(bboxes[i][2] - bboxes[i][0] for i in band)
+        med_w = max(1.0, widths[len(widths) // 2])
+        col_of = {}
+        col = 0
+        prev = None
+        for i in sorted(band, key=lambda i: (bboxes[i][0] + bboxes[i][2]) / 2.0):
+            c = (bboxes[i][0] + bboxes[i][2]) / 2.0
+            if prev is not None and c - prev > 0.5 * med_w:
+                col += 1
+            col_of[i] = col
+            prev = c
+        band.sort(key=lambda i: (col_of[i], bboxes[i][1]))
+        for i in band:
             out.append(regions[i])
     return out
+
+def _split_columns(group: List[TextLine], page_w: int) -> List[List[TextLine]]:
+    if len(group) < 6:
+        return [group]
+    xr = [_line_x_range(ln) for ln in group]
+    x0 = min(a for a, _ in xr)
+    x1 = max(b for _, b in xr)
+    span = x1 - x0
+    widths = sorted(b - a for a, b in xr)
+    med_w = max(1.0, widths[len(widths) // 2])
+    if span < 1.6 * med_w:
+        return [group]
+    narrow = [(a, b) for a, b in xr if (b - a) < 0.6 * span]
+    if len(narrow) < 4:
+        return [group]
+    occ = np.zeros(span + 2, dtype=np.int32)
+    for a, b in narrow:
+        occ[a - x0:b - x0 + 1] += 1
+    lo = max(int(0.25 * span), 1)
+    hi = int(0.75 * span)
+    if hi <= lo:
+        return [group]
+    band = occ[lo:hi]
+    gutter = x0 + lo + int(np.argmin(band))
+    if int(occ[gutter - x0]) > max(1, int(0.15 * len(narrow))):
+        return [group]
+    left, right, wide = [], [], []
+    for ln, (a, b) in zip(group, xr):
+        if b <= gutter:
+            left.append(ln)
+        elif a >= gutter:
+            right.append(ln)
+        else:
+            wide.append(ln)
+    if len(left) < 2 or len(right) < 2:
+        return [group]
+    out = []
+    if wide:
+        out.append(wide)
+    out.append(left)
+    out.append(right)
+    return out
+
 
 def maps_to_regions(maps: np.ndarray) -> List[Region]:
     binary_initial, median_asc = _binarize(maps)
@@ -313,5 +402,9 @@ def maps_to_regions(maps: np.ndarray) -> List[Region]:
         return []
     reg_map = np.maximum(maps[:, :, 4], 0)
     line_groups = _cluster_regions(lines, reg_map)
-    regions = _assemble_regions(line_groups)
+    page_w = maps.shape[1]
+    split_groups = []
+    for g in line_groups:
+        split_groups.extend(_split_columns(g, page_w))
+    regions = _assemble_regions(split_groups)
     return _order_regions(regions)
