@@ -151,6 +151,7 @@ class PageProcessor:
             str(layout_path),
             device=device_str,
             threads=config.ocr_threads,
+            cpu_mem_arena=config.cpu_mem_arena,
         )
         self.recognizer = OnnxRecognizer(
             str(ocr_path),
@@ -158,6 +159,7 @@ class PageProcessor:
             device=device_str,
             threads=config.ocr_threads,
             max_width=config.max_width,
+            cpu_mem_arena=config.cpu_mem_arena,
         )
         self._ocr_model_path = ocr_path
         self._layout_model_path = layout_path

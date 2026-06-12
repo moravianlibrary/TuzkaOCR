@@ -210,6 +210,7 @@ TUZKAOCR_LINE_WORKERS=4             # OCR threads per page
 TUZKAOCR_PAGE_WORKERS=2             # API/background or batch workers
 TUZKAOCR_HEIGHT_SCALE=1.0           # line-height multiplier
 TUZKAOCR_ADAPTIVE_DOWNSAMPLE=true   # true = recover dense pages via adaptive downsampling
+TUZKAOCR_CPU_MEM_ARENA=true         # false = release RAM to OS between pages (see Memory below)
 TUZKAOCR_ROLE_CLASSIFIER=false      # true = tag each ALTO TextLine with role (body/heading/...)
 TUZKAOCR_ROLE_MODEL=role-G-v1.npz   # bundled role classifier model
 TUZKAOCR_RESULTS_DIR=results        # stored API results
@@ -307,6 +308,36 @@ TUZKAOCR_MAX_IMAGE_PIXELS=300000000 # reject decoded images over this pixel coun
 Defaults are generous to support large archival scans. Tune down for stricter deployments. Oversize uploads return a clean **413** for both `Content-Length`-known and chunked/streaming requests.
 
 Uploads up to 8 MiB are held in memory; anything larger spills to disk under `TUZKAOCR_SPOOL_DIR` (or the system temp directory if unset). Under Docker Compose the bundled `./spool` bind-mount is used so the spool is real disk, not RAM-backed tmpfs.
+
+### Memory
+
+Peak memory is driven by the layout detector, a fully-convolutional segmentation net run
+at up to ~1536 px. Its fp32 activations are a **~1.3 GiB transient per page in flight** —
+the model files themselves (3 MB) and decoded pages (~10 MB) are negligible by comparison.
+A rough sizing guide:
+
+```text
+peak ≈ 0.1 GiB  +  PAGE_WORKERS × ~1.3 GiB  +  MAX_QUEUE × ~8 MiB  +  scratch
+```
+
+So the lever is `TUZKAOCR_PAGE_WORKERS`, not the queue depth (each queued job costs only
+~8 MiB). For tight memory limits, prefer **one page worker per engine and scale out by
+engine count** rather than packing more workers into one engine.
+
+`TUZKAOCR_CPU_MEM_ARENA` (default `true`) controls ONNX Runtime's CPU memory arena:
+
+- **`true`** (default): ORT keeps a reusable allocation pool. Lowest per-page latency, but
+  the pool grows to the peak working set and is **not returned to the OS** — idle RSS stays
+  high (~2.4 GiB with two workers), so a tight container limit can OOM on the next page.
+- **`false`**: memory is released back to the OS between pages. Peak RSS drops ~45% and idle
+  RSS falls to ~0.26 GiB, at roughly **+35% single-page latency but only ~−6% batch
+  throughput** (the work is compute-bound). **Recommended for memory-constrained bulk
+  workloads** where avoiding OOM matters more than single-page
+  latency.
+
+With `TUZKAOCR_CPU_MEM_ARENA=false`, `PAGE_WORKERS=2` fits a ~2 GiB limit and `PAGE_WORKERS=1`
+fits ~1.2 GiB. Also ensure scratch (`SPOOL_DIR`, results) is on real disk, not RAM-backed
+tmpfs — tmpfs counts against the container memory limit.
 
 ## Production Notes
 

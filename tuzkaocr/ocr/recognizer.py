@@ -56,13 +56,15 @@ def _greedy_ctc(logits: np.ndarray, chars: List[str]) -> LineResult:
 
 class OnnxRecognizer:
     def __init__(self, model_path: str | Path, vocab_path: str | Path | None = None,
-                 device: str = "cpu", threads: int = 4, max_width: int = 1600):
+                 device: str = "cpu", threads: int = 4, max_width: int = 1600,
+                 cpu_mem_arena: bool = True):
         self.chars, _ = load_vocab(vocab_path)
         self.max_width = max_width
 
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = threads
         opts.inter_op_num_threads = max(1, threads // 2)
+        opts.enable_cpu_mem_arena = cpu_mem_arena
 
         if device == "cuda":
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]

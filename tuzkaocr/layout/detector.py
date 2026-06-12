@@ -21,10 +21,12 @@ def _sigmoid_inplace(x: np.ndarray) -> None:
 
 
 class LayoutDetector:
-    def __init__(self, model_path: str | Path, device: str = "cpu", threads: int = 4):
+    def __init__(self, model_path: str | Path, device: str = "cpu", threads: int = 4,
+                 cpu_mem_arena: bool = True):
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = threads
         opts.inter_op_num_threads = max(1, threads // 2)
+        opts.enable_cpu_mem_arena = cpu_mem_arena
 
         if device == "cuda":
             providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]

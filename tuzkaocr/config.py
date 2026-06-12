@@ -45,6 +45,8 @@ class Config:
     max_width:    int   = field(default_factory=lambda: _env("MAX_WIDTH",    1600))
 
     adaptive_downsample: bool = field(default_factory=lambda: _env("ADAPTIVE_DOWNSAMPLE", True))
+    
+    cpu_mem_arena: bool = field(default_factory=lambda: _env("CPU_MEM_ARENA", True))
 
     role_classifier: bool = field(default_factory=lambda: _env("ROLE_CLASSIFIER", False))
     role_model:      str  = field(default_factory=lambda: _env("ROLE_MODEL", "role-G-v1.npz"))
