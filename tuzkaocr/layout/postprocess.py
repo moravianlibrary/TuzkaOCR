@@ -17,12 +17,12 @@ class Region:
     lines: List[TextLine] = field(default_factory=list)
     polygon: List[Tuple[int, int]] = field(default_factory=list)
 
-def _nms_baseline(prob: np.ndarray, half_win: int=2, threshold: float=0.35) -> np.ndarray:
+def _nms_baseline(prob: np.ndarray, half_win: int=2, threshold: float=0.30) -> np.ndarray:
     kernel = np.ones((2 * half_win + 1, 1), dtype=np.float32)
     local_max = ndi.maximum_filter(prob, footprint=kernel, mode='constant')
     return ((prob >= local_max - 1e-06) & (prob > threshold)).astype(np.uint8)
 
-def _nms_baseline_subtract_endpoints(prob: np.ndarray, endpoint_prob: np.ndarray, half_win: int=2, threshold: float=0.35, endpoint_weight: float=0.5) -> np.ndarray:
+def _nms_baseline_subtract_endpoints(prob: np.ndarray, endpoint_prob: np.ndarray, half_win: int=2, threshold: float=0.30, endpoint_weight: float=0.5) -> np.ndarray:
     kernel = np.ones((2 * half_win + 1, 1), dtype=np.float32)
     local_max = ndi.maximum_filter(prob, footprint=kernel, mode='constant')
     nms = prob * (prob >= local_max - 1e-06)
@@ -104,7 +104,7 @@ def _line_x_range(ln: TextLine) -> Tuple[int, int]:
     xs = [p[0] for p in ln.baseline]
     return (min(xs), max(xs)) if xs else (0, 0)
 
-def _binarize(maps: np.ndarray, half_win: int=1, threshold: float=0.35, endpoint_weight: float=0.5) -> Tuple[np.ndarray, float]:
+def _binarize(maps: np.ndarray, half_win: int=1, threshold: float=0.30, endpoint_weight: float=0.5) -> Tuple[np.ndarray, float]:
     base_map = maps[:, :, 2]
     ep_map = maps[:, :, 3]
     binary = _nms_baseline_subtract_endpoints(base_map, ep_map, half_win=half_win, threshold=threshold, endpoint_weight=endpoint_weight)
@@ -115,37 +115,79 @@ def _binarize(maps: np.ndarray, half_win: int=1, threshold: float=0.35, endpoint
     median_asc = float(np.median(asc_samples))
     return (binary, median_asc)
 
-def _gutter_columns(binary: np.ndarray) -> List[int]:
-    col = binary.sum(axis=0).astype(np.float64)
-    nz = np.where(col > 0)[0]
-    if nz.size < 10:
+def _covote_corridors(starts: np.ndarray, ends: np.ndarray, x_lo: float, x_hi: float,
+                      med_w: float, n_lines: int):
+    thr = max(3, 0.04 * n_lines)
+    vote_thr = max(4, 0.12 * n_lines)
+    hist, be = np.histogram(np.concatenate([starts, ends]),
+                            bins=max(10, int((x_hi - x_lo) // 8)), range=(x_lo, x_hi))
+    cand = [(be[i] + be[i + 1]) / 2 for i in range(len(hist)) if hist[i] > thr]
+    merged = []
+    for c in sorted(cand):
+        if merged and c - merged[-1][-1] < 20:
+            merged[-1].append(c)
+        else:
+            merged.append([c])
+    clusters = []
+    for m in merged:
+        c = float(np.mean(m))
+        ne = int((np.abs(ends - c) < 15).sum())
+        ns = int((np.abs(starts - c) < 15).sum())
+        clusters.append((c, ne, ns))
+    out = []
+    for i, (c, ne, ns) in enumerate(clusters):
+        if min(ne, ns) >= vote_thr:
+            out.append((c, min(ne, ns)))
+            continue
+        if ne >= vote_thr:
+            for c2, ne2, ns2 in clusters[i + 1:]:
+                if ns2 >= vote_thr:
+                    out.append(((c + c2) / 2.0, min(ne, ns2)))
+                    break
+                if ne2 >= vote_thr:
+                    break
+    return out
+
+
+def _vote_gutters(dilated: np.ndarray, binary: np.ndarray) -> List[Tuple[int, int, int]]:
+    num, labels = cv2.connectedComponents(dilated, connectivity=8)
+    labels = labels * binary.astype(labels.dtype)
+    Wm = binary.shape[1]
+    spans = []
+    for i in range(1, num):
+        ys, xs = np.where(labels == i)
+        if xs.size > 8:
+            spans.append((int(xs.min()), int(xs.max()), int(np.median(ys))))
+    if len(spans) < 20:
         return []
-    a, b = int(nz[0]), int(nz[-1])
-    width = b - a
-    if width < 60:
+    widths = sorted(b - a for a, b, _ in spans)
+    med = widths[len(widths) // 2]
+    narrow = [(a, b, y) for a, b, y in spans if b - a < 1.5 * med]
+    if len(narrow) < 0.5 * len(spans):
         return []
-    k = max(3, width // 80)
-    sm = np.convolve(col, np.ones(k) / k, mode="same")
-    content = col[a:b + 1]
-    ref = float(np.median(content[content > 0])) if np.any(content > 0) else 0.0
-    if ref <= 0:
-        return []
-    lo = a + int(0.18 * width)
-    hi = a + int(0.82 * width)
-    if hi <= lo:
-        return []
-    flank = max(8, width // 6)
+    starts = np.array([a for a, _, _ in narrow])
+    ends = np.array([b for _, b, _ in narrow])
+    ys_n = np.array([y for _, _, y in narrow])
+    all_starts = np.array([a for a, _, _ in spans])
+    all_ends = np.array([b for _, b, _ in spans])
     gutters = []
-    g = lo + int(np.argmin(sm[lo:hi]))
-    if sm[g] < 0.45 * ref:
-        left_peak = float(sm[max(a, g - flank):g].max()) if g > a else 0.0
-        right_peak = float(sm[g + 1:min(b + 1, g + flank)].max()) if g < b else 0.0
-        if left_peak > 2.0 * max(sm[g], 1e-6) and right_peak > 2.0 * max(sm[g], 1e-6):
-            gutters.append(g)
+    pad = max(4, int(0.02 * binary.shape[0]))
+    for c, _mass in _covote_corridors(starts, ends, 0, Wm, med, len(narrow)):
+        if not (0.1 * Wm < c < 0.9 * Wm):
+            continue
+        crossing = int(((all_starts < c - 10) & (all_ends > c + 10)).sum())
+        if crossing < max(3, 0.05 * len(spans)):
+            continue
+        near = (np.abs(ends - c) < 25) | (np.abs(starts - c) < 25)
+        vy = ys_n[near]
+        if vy.size == 0:
+            continue
+        gutters.append((int(c), max(0, int(vy.min()) - pad),
+                        min(binary.shape[0] - 1, int(vy.max()) + pad)))
     return gutters
 
 
-def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: float, threshold: float=0.35, endpoint_weight: float=0.5) -> List[TextLine]:
+def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: float, threshold: float=0.30, endpoint_weight: float=0.5) -> List[TextLine]:
     base_map = maps[:, :, 2]
     ep_map = maps[:, :, 3]
     if median_asc > 10:
@@ -161,8 +203,9 @@ def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: flo
     binary = _nms_baseline_subtract_endpoints(base_map, ep_map, half_win=nms_half_win, threshold=threshold, endpoint_weight=endpoint_weight)
     kernel = np.ones((v_dilate, 2 * h_dilate + 1), dtype=np.uint8)
     dilated = cv2.dilate(binary, kernel, iterations=1)
-    for g in _gutter_columns(binary):
-        dilated[:, max(0, g - h_dilate - 1):g + h_dilate + 2] = 0
+    gutters = _vote_gutters(dilated, binary)
+    for g, gy0, gy1 in gutters:
+        dilated[gy0:gy1 + 1, max(0, g - h_dilate - 1):g + h_dilate + 2] = 0
     num, labels = cv2.connectedComponents(dilated, connectivity=8)
     labels = labels * binary.astype(labels.dtype)
     asc_h = ndi.grey_dilation(maps[:, :, 0], size=(5, 1))
@@ -366,36 +409,81 @@ def _split_columns(group: List[TextLine], page_w: int) -> List[List[TextLine]]:
     narrow = [(a, b) for a, b in xr if (b - a) < 0.6 * span]
     if len(narrow) < 4:
         return [group]
-    occ = np.zeros(span + 2, dtype=np.int32)
-    for a, b in narrow:
-        occ[a - x0:b - x0 + 1] += 1
     lo = max(int(0.25 * span), 1)
     hi = int(0.75 * span)
     if hi <= lo:
         return [group]
-    band = occ[lo:hi]
-    gutter = x0 + lo + int(np.argmin(band))
-    if int(occ[gutter - x0]) > max(1, int(0.15 * len(narrow))):
+    starts = np.array([a for a, _ in narrow])
+    ends = np.array([b for _, b in narrow])
+    gutter, best = None, 0
+    for c, mass in _covote_corridors(starts, ends, x0, x1, med_w, len(narrow)):
+        if x0 + lo < c < x0 + hi and mass > best:
+            best, gutter = mass, int(c)
+    if gutter is None:
         return [group]
     left, right, wide = [], [], []
     for ln, (a, b) in zip(group, xr):
-        if b <= gutter:
-            left.append(ln)
-        elif a >= gutter:
-            right.append(ln)
-        else:
+        if a < gutter - 10 and b > gutter + 10:
             wide.append(ln)
+        elif (a + b) / 2.0 < gutter:
+            left.append(ln)
+        else:
+            right.append(ln)
     if len(left) < 2 or len(right) < 2:
         return [group]
     out = []
     if wide:
         out.append(wide)
-    out.append(left)
-    out.append(right)
+    out.extend(_split_columns(left, page_w))
+    out.extend(_split_columns(right, page_w))
     return out
 
+def _horizontal_dividers(page_gray: np.ndarray) -> List[int]:
+    if page_gray is None:
+        return []
+    Hd, Wd = page_gray.shape
+    bw = (page_gray < 128).astype(np.uint8)
+    k = max(8, Wd // 15)
+    horiz = cv2.morphologyEx(bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (k, 1)))
+    rowsum = horiz.sum(axis=1)
+    cand = np.where(rowsum > 0.5 * Wd)[0]
+    if cand.size == 0:
+        return []
+    out = []
+    tol = max(2, Hd // 200)
+    s = p = int(cand[0])
+    for y in cand[1:]:
+        y = int(y)
+        if y - p <= tol:
+            p = y
+        else:
+            out.append((s + p) // 2)
+            s = p = y
+    out.append((s + p) // 2)
+    return out
 
-def maps_to_regions(maps: np.ndarray) -> List[Region]:
+def _split_at_dividers(groups: List[List[TextLine]], dividers: List[int]) -> List[List[TextLine]]:
+    if not dividers:
+        return groups
+    ds = sorted(dividers)
+    out = []
+    for g in groups:
+        if len(g) < 2:
+            out.append(g)
+            continue
+        ys = [_line_center_y(ln) for ln in g]
+        cuts = [d for d in ds if min(ys) < d < max(ys)]
+        if not cuts:
+            out.append(g)
+            continue
+        edges = [-1.0e9] + cuts + [1.0e9]
+        for a, b in zip(edges[:-1], edges[1:]):
+            seg = [ln for ln, y in zip(g, ys) if a < y <= b]
+            if seg:
+                out.append(seg)
+    return out
+
+def maps_to_regions(maps: np.ndarray, page_gray: np.ndarray = None) -> List[Region]:
     binary_initial, median_asc = _binarize(maps)
     lines = _extract_lines(maps, binary_initial, median_asc)
     if not lines:
@@ -406,5 +494,6 @@ def maps_to_regions(maps: np.ndarray) -> List[Region]:
     split_groups = []
     for g in line_groups:
         split_groups.extend(_split_columns(g, page_w))
+    split_groups = _split_at_dividers(split_groups, _horizontal_dividers(page_gray))
     regions = _assemble_regions(split_groups)
     return _order_regions(regions)

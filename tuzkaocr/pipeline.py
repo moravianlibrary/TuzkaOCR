@@ -168,6 +168,7 @@ class PageProcessor:
         regions, img_scale = self.detector.detect(img_bgr, downsample)
         n_lines = sum(len(r.lines) for r in regions)
         pitch = adaptive.min_pitch_ratio(regions, img_scale)
+        wide = adaptive.wide_line_frac(regions, img_scale, img_bgr.shape[1])
 
         line_data: List[_LineInput] = []
         for ri, region in enumerate(regions):
@@ -187,7 +188,8 @@ class PageProcessor:
         mean_conf = float(np.mean(confs)) if confs else 0.0
 
         return {"line_data": line_data, "results": results,
-                "mean_conf": mean_conf, "pitch": pitch, "n_lines": n_lines}
+                "mean_conf": mean_conf, "pitch": pitch, "n_lines": n_lines,
+                "wide": wide}
 
     @staticmethod
     def _assemble_blocks(line_data: List[_LineInput], results: list) -> List[dict]:
@@ -227,10 +229,11 @@ class PageProcessor:
             for k, ds in enumerate(adaptive.DS_LEVELS):
                 r = self._detect_ocr(img_bgr, hs, ds)
                 visited.append({"ds": ds, "conf": r["mean_conf"],
-                                "n_lines": r["n_lines"], "pitch": r["pitch"], "r": r})
+                                "n_lines": r["n_lines"], "pitch": r["pitch"],
+                                "wide": r["wide"], "r": r})
                 if k == len(adaptive.DS_LEVELS) - 1:
                     break
-                if not adaptive.starved(r["pitch"], r["mean_conf"]):
+                if not adaptive.starved(r["pitch"], r["mean_conf"], r["wide"]):
                     break
             chosen = adaptive.choose(visited)["r"]
             blocks = self._assemble_blocks(chosen["line_data"], chosen["results"])

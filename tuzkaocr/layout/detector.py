@@ -80,28 +80,29 @@ class LayoutDetector:
             _sigmoid_inplace(out[:, 2:5])
 
         maps = out[0, :, :hd, :wd].transpose(1, 2, 0)
-        return np.ascontiguousarray(maps, dtype=np.float32), img_scale
+        gray = cv2.cvtColor(img_ds, cv2.COLOR_BGR2GRAY)
+        return np.ascontiguousarray(maps, dtype=np.float32), img_scale, gray
 
     def detect(self, img_bgr: np.ndarray, downsample: int | None = None) -> tuple[list[Region], float]:
         orig_h, orig_w = img_bgr.shape[:2]
         if orig_w > orig_h * 1.2:
             return self._detect_split(img_bgr, downsample)
 
-        maps, img_scale = self.get_maps(img_bgr, downsample)
-        return maps_to_regions(maps), img_scale
+        maps, img_scale, gray = self.get_maps(img_bgr, downsample)
+        return maps_to_regions(maps, gray), img_scale
 
     def _detect_split(self, img_bgr: np.ndarray, downsample: int | None = None) -> tuple[list[Region], float]:
         h, w = img_bgr.shape[:2]
         mid = w // 2
         ds = downsample or DOWNSAMPLE
 
-        left_maps, _  = self.get_maps(img_bgr[:, :mid], downsample)
+        left_maps, _, left_gray  = self.get_maps(img_bgr[:, :mid], downsample)
         L_wd = left_maps.shape[1]
-        left_regions = maps_to_regions(left_maps)
+        left_regions = maps_to_regions(left_maps, left_gray)
 
-        right_maps, _ = self.get_maps(img_bgr[:, mid:], downsample)
+        right_maps, _, right_gray = self.get_maps(img_bgr[:, mid:], downsample)
         R_wd = right_maps.shape[1]
-        right_regions = maps_to_regions(right_maps)
+        right_regions = maps_to_regions(right_maps, right_gray)
 
         pre_scale = MAX_ORIGINAL_WIDTH / w if w > MAX_ORIGINAL_WIDTH else 1.0
         F_w = int(w * pre_scale) if w > MAX_ORIGINAL_WIDTH else w
