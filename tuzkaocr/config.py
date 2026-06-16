@@ -29,7 +29,7 @@ def _env(key: str, default):
 
 @dataclass
 class Config:
-    layout_model: str = field(default_factory=lambda: _env("LAYOUT_MODEL", "dec-A-v4.onnx"))
+    layout_model: str = field(default_factory=lambda: _env("LAYOUT_MODEL", "dec-B-v2.onnx"))
     ocr_model:    str = field(default_factory=lambda: _env("OCR_MODEL",    "rec-E-v5.int8.onnx"))
     vocab:        str = field(default_factory=lambda: _env("VOCAB",        "vocab.json"))
 

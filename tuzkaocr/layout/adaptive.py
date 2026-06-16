@@ -12,6 +12,12 @@ MIN_REGION_WIDTH = 400
 WIDE_FRAC_THRESH = 0.08
 WIDE_IMPROVE_MARGIN = 0.04
 UNREADABLE_CONF = 0.60
+MIN_LINE_HEIGHT_PX = 8.0
+
+
+def median_line_height(regions) -> float:
+    hs = [ln.heights[0] + ln.heights[1] for r in regions for ln in r.lines]
+    return float(np.median(hs)) if hs else 99.0
 
 
 def min_pitch_ratio(regions, img_scale) -> float:
@@ -46,8 +52,10 @@ def wide_line_frac(regions, img_scale, page_w) -> float:
     return float(np.mean([(w > 1.8 * med and w > 0.45 * page_w) for w in ws]))
 
 
-def starved(pitch, conf, wide=0.0) -> bool:
-    return pitch < PITCH_RATIO_THRESH or conf < OCR_CONF_THRESH or wide > WIDE_FRAC_THRESH
+def starved(pitch, conf, wide=0.0, lineh=None) -> bool:
+    return (pitch < PITCH_RATIO_THRESH or conf < OCR_CONF_THRESH
+            or wide > WIDE_FRAC_THRESH
+            or (lineh is not None and lineh < MIN_LINE_HEIGHT_PX))
 
 
 def choose(visited):
@@ -58,7 +66,8 @@ def choose(visited):
                 and cand.get("wide", 0.0) < base["wide"] - WIDE_IMPROVE_MARGIN
                 and cand["conf"] >= base["conf"] - 0.01):
             return cand
-    base_starved = base["pitch"] < PITCH_RATIO_THRESH or base["conf"] < UNREADABLE_CONF
+    base_starved = (base["pitch"] < PITCH_RATIO_THRESH or base["conf"] < UNREADABLE_CONF
+                    or base.get("lineh", 99.0) < MIN_LINE_HEIGHT_PX)
     cand = max(visited, key=lambda v: v["conf"])
     accept = (cand["ds"] != base["ds"]
               and cand["conf"] > base["conf"] + SELECT_MARGIN

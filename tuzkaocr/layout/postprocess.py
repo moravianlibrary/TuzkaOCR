@@ -6,54 +6,34 @@ import cv2
 import numpy as np
 from scipy import ndimage as ndi
 
+
 @dataclass
 class TextLine:
     baseline: List[Tuple[int, int]]
     polygon: List[Tuple[int, int]]
     heights: Tuple[float, float]
 
+
 @dataclass
 class Region:
     lines: List[TextLine] = field(default_factory=list)
     polygon: List[Tuple[int, int]] = field(default_factory=list)
 
-def _nms_baseline(prob: np.ndarray, half_win: int=2, threshold: float=0.30) -> np.ndarray:
-    kernel = np.ones((2 * half_win + 1, 1), dtype=np.float32)
-    local_max = ndi.maximum_filter(prob, footprint=kernel, mode='constant')
-    return ((prob >= local_max - 1e-06) & (prob > threshold)).astype(np.uint8)
 
-def _nms_baseline_subtract_endpoints(prob: np.ndarray, endpoint_prob: np.ndarray, half_win: int=2, threshold: float=0.30, endpoint_weight: float=0.5) -> np.ndarray:
-    kernel = np.ones((2 * half_win + 1, 1), dtype=np.float32)
-    local_max = ndi.maximum_filter(prob, footprint=kernel, mode='constant')
-    nms = prob * (prob >= local_max - 1e-06)
-    return (nms - endpoint_weight * endpoint_prob > threshold).astype(np.uint8)
-
-def _baseline_points_from_xy(ys: np.ndarray, xs: np.ndarray, step: int=4) -> List[Tuple[int, int]]:
+def _resample_baseline(xs: np.ndarray, ys: np.ndarray, max_pts: int = 10):
     if xs.size == 0:
-        return []
-    x_min = int(xs.min())
-    x_max = int(xs.max())
+        return None
     order = np.argsort(xs, kind="stable")
-    xs_s = xs[order]
-    ys_s = ys[order]
-    starts = np.concatenate(([0], np.flatnonzero(np.diff(xs_s)) + 1))
-    ends = np.concatenate((starts[1:], [xs_s.size]))
-    uniq_x = xs_s[starts]
-    targets = np.arange(x_min, x_max + 1, step, dtype=xs.dtype)
-    idx = np.searchsorted(uniq_x, targets)
-    safe_idx = np.clip(idx, 0, uniq_x.size - 1)
-    hit = (idx < uniq_x.size) & (uniq_x[safe_idx] == targets)
-    pts: List[Tuple[int, int]] = []
-    for t, h, i in zip(targets.tolist(), hit.tolist(), idx.tolist()):
-        if not h:
-            continue
-        seg = ys_s[starts[i]:ends[i]]
-        pts.append((int(t), int(np.median(seg))))
-    if pts and pts[-1][0] != x_max:
-        i = uniq_x.size - 1
-        seg = ys_s[starts[i]:ends[i]]
-        pts.append((int(x_max), int(np.median(seg))))
-    return pts
+    xs, ys = xs[order], ys[order]
+    bounds = np.concatenate(([0], np.flatnonzero(np.diff(xs)) + 1, [xs.size]))
+    ux = xs[bounds[:-1]]
+    uy = np.array([np.median(ys[bounds[i]:bounds[i + 1]]) for i in range(len(ux))])
+    n = ux.size
+    if n < 2:
+        return None
+    k = max(2, min(max_pts, n // 10))
+    sel = np.linspace(0, n - 1, k).astype(int)
+    return [(int(ux[s]), int(round(uy[s]))) for s in sel]
 
 
 def _sample_heights_from_xy(ys: np.ndarray, xs: np.ndarray, asc_map: np.ndarray, desc_map: np.ndarray, percentile: float=70.0) -> Tuple[float, float]:
@@ -62,6 +42,7 @@ def _sample_heights_from_xy(ys: np.ndarray, xs: np.ndarray, asc_map: np.ndarray,
     ascs = np.maximum(asc_map[ys, xs], 0)
     descs = np.maximum(desc_map[ys, xs], 0)
     return (float(np.percentile(ascs, percentile)), float(np.percentile(descs, percentile)))
+
 
 def _baseline_to_polygon_normal(points, asc, desc, min_asc=1.0, min_desc=1.0):
     asc = max(float(asc), min_asc)
@@ -82,6 +63,7 @@ def _baseline_to_polygon_normal(points, asc, desc, min_asc=1.0, min_desc=1.0):
     poly = np.vstack([up, down[::-1]])
     return [(int(round(x)), int(round(y))) for x, y in poly]
 
+
 def _region_hull(lines):
     pts = []
     for ln in lines:
@@ -92,254 +74,211 @@ def _region_hull(lines):
     hull = cv2.convexHull(arr)
     return [(int(p[0][0]), int(p[0][1])) for p in hull]
 
-def _line_center_x(ln: TextLine) -> float:
-    xs = [p[0] for p in ln.baseline]
-    return float(np.mean(xs)) if xs else 0.0
 
 def _line_center_y(ln: TextLine) -> float:
     ys = [p[1] for p in ln.baseline]
     return float(np.mean(ys)) if ys else 0.0
 
+
 def _line_x_range(ln: TextLine) -> Tuple[int, int]:
     xs = [p[0] for p in ln.baseline]
     return (min(xs), max(xs)) if xs else (0, 0)
 
-def _binarize(maps: np.ndarray, half_win: int=1, threshold: float=0.30, endpoint_weight: float=0.5) -> Tuple[np.ndarray, float]:
-    base_map = maps[:, :, 2]
-    ep_map = maps[:, :, 3]
-    binary = _nms_baseline_subtract_endpoints(base_map, ep_map, half_win=half_win, threshold=threshold, endpoint_weight=endpoint_weight)
-    ys, xs = np.where(binary)
-    if len(xs) == 0:
-        return (binary, 10.0)
-    asc_samples = np.maximum(maps[ys, xs, 0], 0)
-    median_asc = float(np.median(asc_samples))
-    return (binary, median_asc)
 
-def _covote_corridors(starts: np.ndarray, ends: np.ndarray, x_lo: float, x_hi: float,
-                      med_w: float, n_lines: int):
-    thr = max(3, 0.04 * n_lines)
-    vote_thr = max(4, 0.12 * n_lines)
-    hist, be = np.histogram(np.concatenate([starts, ends]),
-                            bins=max(10, int((x_hi - x_lo) // 8)), range=(x_lo, x_hi))
-    cand = [(be[i] + be[i + 1]) / 2 for i in range(len(hist)) if hist[i] > thr]
-    merged = []
-    for c in sorted(cand):
-        if merged and c - merged[-1][-1] < 20:
-            merged[-1].append(c)
-        else:
-            merged.append([c])
-    clusters = []
-    for m in merged:
-        c = float(np.mean(m))
-        ne = int((np.abs(ends - c) < 15).sum())
-        ns = int((np.abs(starts - c) < 15).sum())
-        clusters.append((c, ne, ns))
-    out = []
-    for i, (c, ne, ns) in enumerate(clusters):
-        if min(ne, ns) >= vote_thr:
-            out.append((c, min(ne, ns)))
+def _extract_lines(maps: np.ndarray, threshold: float = 0.25,
+                   endpoint_weight: float = 1.0,
+                   vertical_connection_range: int = 3) -> List[TextLine]:
+    H, W = maps.shape[:2]
+    asc_map = ndi.grey_dilation(maps[:, :, 0], size=(5, 1))
+    desc_map = ndi.grey_dilation(maps[:, :, 1], size=(5, 1))
+
+    base = ndi.convolve(maps[:, :, 2].astype(np.float32), np.ones((3, 3), np.float32) / 9.0)
+    dil = ndi.grey_dilation(base, size=(5, 1))
+    nms = base * (base >= dil - 1e-6)
+    binary = ((nms - endpoint_weight * maps[:, :, 3]) > threshold).astype(np.uint8)
+    if int(binary.sum()) == 0:
+        return []
+
+    structure = np.ones((vertical_connection_range, 3), np.uint8)
+    dilated = cv2.dilate(binary, structure, iterations=1)
+    num, labels = cv2.connectedComponents(dilated, connectivity=8)
+    labels = labels * binary
+
+    lines: List[TextLine] = []
+    for lab in range(1, num):
+        ys, xs = np.where(labels == lab)
+        if xs.size <= 5:
             continue
-        if ne >= vote_thr:
-            for c2, ne2, ns2 in clusters[i + 1:]:
-                if ns2 >= vote_thr:
-                    out.append(((c + c2) / 2.0, min(ne, ns2)))
-                    break
-                if ne2 >= vote_thr:
-                    break
+        baseline = _resample_baseline(xs, ys)
+        if baseline is None or (baseline[-1][0] - baseline[0][0]) < 5:
+            continue
+        baseline[0] = (max(0, baseline[0][0] - 2), baseline[0][1])
+        baseline[-1] = (min(W - 1, baseline[-1][0] + 2), baseline[-1][1])
+        asc, desc = _sample_heights_from_xy(ys, xs, asc_map, desc_map, percentile=50.0)
+        polygon = _baseline_to_polygon_normal(baseline, asc, desc, min_asc=1.0, min_desc=1.0)
+        lines.append(TextLine(
+            baseline=[(int(x), int(y)) for x, y in baseline],
+            polygon=[(int(x), int(y)) for x, y in polygon],
+            heights=(float(asc), float(desc)),
+        ))
+    return lines
+
+
+def _merge_line_fragments(lines: List[TextLine], sep_map: np.ndarray,
+                          gap_factor: float = 1.5, sep_gate: float = 0.2) -> List[TextLine]:
+    n = len(lines)
+    if n < 2:
+        return lines
+    H, W = sep_map.shape
+    it = []
+    for ln in lines:
+        xs = [p[0] for p in ln.baseline]
+        ys = [p[1] for p in ln.baseline]
+        it.append({"ln": ln, "x0": min(xs), "x1": max(xs), "cy": float(np.mean(ys)),
+                   "h": max(1.0, ln.heights[0] + ln.heights[1])})
+
+    parent = list(range(n))
+
+    def find(a):
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
+
+    order = sorted(range(n), key=lambda i: (it[i]["cy"], it[i]["x0"]))
+    for ii in range(n):
+        i = order[ii]
+        for jj in range(ii + 1, n):
+            j = order[jj]
+            a, b = it[i], it[j]
+            if b["cy"] - a["cy"] > max(a["h"], b["h"]):
+                break
+            h = 0.5 * (a["h"] + b["h"])
+            if abs(a["cy"] - b["cy"]) > 0.6 * h:
+                continue
+            lo, hi = (a, b) if a["x0"] <= b["x0"] else (b, a)
+            gap = hi["x0"] - lo["x1"]
+            if gap < -0.5 * h or gap > gap_factor * h:
+                continue
+            gx0, gx1 = int(min(lo["x1"], hi["x0"])), int(max(lo["x1"], hi["x0"]) + 1)
+            cy = int(0.5 * (a["cy"] + b["cy"]))
+            ry0, ry1 = max(0, cy - int(0.5 * h)), min(H, cy + int(0.5 * h) + 1)
+            gx0, gx1 = max(0, gx0), min(W, gx1)
+            if gx1 > gx0 and ry1 > ry0 and float(sep_map[ry0:ry1, gx0:gx1].max()) > sep_gate:
+                continue
+            parent[find(i)] = find(j)
+
+    groups: dict = defaultdict(list)
+    for i in range(n):
+        groups[find(i)].append(it[i])
+
+    out: List[TextLine] = []
+    for grp in groups.values():
+        if len(grp) == 1:
+            out.append(grp[0]["ln"])
+            continue
+        pts = [p for g in grp for p in g["ln"].baseline]
+        xs = np.array([p[0] for p in pts]); ys = np.array([p[1] for p in pts])
+        bl = _resample_baseline(xs, ys)
+        if bl is None:
+            out.append(max(grp, key=lambda g: g["x1"] - g["x0"])["ln"])
+            continue
+        asc = float(np.mean([g["ln"].heights[0] for g in grp]))
+        desc = float(np.mean([g["ln"].heights[1] for g in grp]))
+        poly = _baseline_to_polygon_normal(bl, asc, desc, min_asc=1.0, min_desc=1.0)
+        out.append(TextLine(baseline=[(int(x), int(y)) for x, y in bl],
+                            polygon=[(int(x), int(y)) for x, y in poly],
+                            heights=(asc, desc)))
     return out
 
 
-def _vote_gutters(dilated: np.ndarray, binary: np.ndarray) -> List[Tuple[int, int, int]]:
-    num, labels = cv2.connectedComponents(dilated, connectivity=8)
-    labels = labels * binary.astype(labels.dtype)
-    Wm = binary.shape[1]
-    spans = []
-    for i in range(1, num):
-        ys, xs = np.where(labels == i)
-        if xs.size > 8:
-            spans.append((int(xs.min()), int(xs.max()), int(np.median(ys))))
-    if len(spans) < 20:
-        return []
-    widths = sorted(b - a for a, b, _ in spans)
-    med = widths[len(widths) // 2]
-    narrow = [(a, b, y) for a, b, y in spans if b - a < 1.5 * med]
-    if len(narrow) < 0.5 * len(spans):
-        return []
-    starts = np.array([a for a, _, _ in narrow])
-    ends = np.array([b for _, b, _ in narrow])
-    ys_n = np.array([y for _, _, y in narrow])
-    all_starts = np.array([a for a, _, _ in spans])
-    all_ends = np.array([b for _, b, _ in spans])
-    gutters = []
-    pad = max(4, int(0.02 * binary.shape[0]))
-    for c, _mass in _covote_corridors(starts, ends, 0, Wm, med, len(narrow)):
-        if not (0.1 * Wm < c < 0.9 * Wm):
-            continue
-        crossing = int(((all_starts < c - 10) & (all_ends > c + 10)).sum())
-        if crossing < max(3, 0.05 * len(spans)):
-            continue
-        near = (np.abs(ends - c) < 25) | (np.abs(starts - c) < 25)
-        vy = ys_n[near]
-        if vy.size == 0:
-            continue
-        gutters.append((int(c), max(0, int(vy.min()) - pad),
-                        min(binary.shape[0] - 1, int(vy.max()) + pad)))
-    return gutters
-
-
-def _extract_lines(maps: np.ndarray, binary_initial: np.ndarray, median_asc: float, threshold: float=0.30, endpoint_weight: float=0.5) -> List[TextLine]:
-    base_map = maps[:, :, 2]
-    ep_map = maps[:, :, 3]
-    if median_asc > 10:
-        nms_half_win = 2
-        v_dilate = 5
-        h_dilate = 2
-        min_pixels = 8
-    else:
-        nms_half_win = 1
-        v_dilate = 3
-        h_dilate = 1
-        min_pixels = max(5, int(median_asc))
-    binary = _nms_baseline_subtract_endpoints(base_map, ep_map, half_win=nms_half_win, threshold=threshold, endpoint_weight=endpoint_weight)
-    kernel = np.ones((v_dilate, 2 * h_dilate + 1), dtype=np.uint8)
-    dilated = cv2.dilate(binary, kernel, iterations=1)
-    gutters = _vote_gutters(dilated, binary)
-    for g, gy0, gy1 in gutters:
-        dilated[gy0:gy1 + 1, max(0, g - h_dilate - 1):g + h_dilate + 2] = 0
-    num, labels = cv2.connectedComponents(dilated, connectivity=8)
-    labels = labels * binary.astype(labels.dtype)
-    asc_h = ndi.grey_dilation(maps[:, :, 0], size=(5, 1))
-    desc_h = ndi.grey_dilation(maps[:, :, 1], size=(5, 1))
-    extend = max(1, int(median_asc * 0.25))
-    min_asc_poly = max(1.0, median_asc * 0.5)
-    min_desc_poly = max(1.0, median_asc * 0.4)
-    H_map, W_map = binary.shape
-
-    ys_all, xs_all = np.where(labels > 0)
-    if ys_all.size == 0:
-        return []
-    lids_all = labels[ys_all, xs_all]
-    order = np.argsort(lids_all, kind="stable")
-    lids_sorted = lids_all[order]
-    ys_sorted = ys_all[order]
-    xs_sorted = xs_all[order]
-    lab_starts = np.concatenate(([0], np.flatnonzero(np.diff(lids_sorted)) + 1))
-    lab_ends = np.concatenate((lab_starts[1:], [lids_sorted.size]))
-
-    lines: List[TextLine] = []
-    for k in range(lab_starts.size):
-        s, e = int(lab_starts[k]), int(lab_ends[k])
-        if e - s < min_pixels:
-            continue
-        ys_lab = ys_sorted[s:e]
-        xs_lab = xs_sorted[s:e]
-        pts = _baseline_points_from_xy(ys_lab, xs_lab, step=4)
-        if len(pts) < 2:
-            continue
-        (x0, y0), (x1, y1) = (pts[0], pts[1])
-        dxs, dys = (x1 - x0, y1 - y0)
-        n0 = max(1e-06, (dxs * dxs + dys * dys) ** 0.5)
-        ex0 = max(0, int(x0 - dxs / n0 * extend))
-        ey0 = int(y0 - dys / n0 * extend)
-        (xa, ya), (xb, yb) = (pts[-2], pts[-1])
-        dxe, dye = (xb - xa, yb - ya)
-        ne = max(1e-06, (dxe * dxe + dye * dye) ** 0.5)
-        ex1 = min(W_map - 1, int(xb + dxe / ne * extend))
-        ey1 = int(yb + dye / ne * extend)
-        pts = [(ex0, max(0, min(H_map - 1, ey0)))] + pts + [(ex1, max(0, min(H_map - 1, ey1)))]
-        asc, desc = _sample_heights_from_xy(ys_lab, xs_lab, asc_h, desc_h, percentile=70.0)
-        poly = _baseline_to_polygon_normal(pts, asc, desc, min_asc=min_asc_poly, min_desc=min_desc_poly)
-        lines.append(TextLine(baseline=pts, polygon=poly, heights=(asc, desc)))
-    return lines
-
-def _path_penalty(b_top: np.ndarray, b_bot: np.ndarray, shift_top: float, shift_bot: float, x1: int, x2: int, region_map: np.ndarray) -> float:
-    H, W = region_map.shape
-    if x2 <= x1:
+def _separator_penalty(baseline: List[Tuple[int, int]], shift: float,
+                       x1: int, x2: int, sep_map: np.ndarray) -> float:
+    H, W = sep_map.shape
+    pts = np.array(baseline, dtype=np.int32).copy()
+    pts[:, 1] = np.clip(pts[:, 1] + int(round(shift)), 0, H - 1)
+    x_min = max(0, min(int(pts[:, 0].min()), int(x1)) - 2)
+    x_max = min(W, max(int(pts[:, 0].max()), int(x2)) + 2)
+    y_min = max(0, int(pts[:, 1].min()) - 1)
+    y_max = min(H, int(pts[:, 1].max()) + 2)
+    if x_max - x_min < 2 or y_max - y_min < 2:
         return 0.0
-    pts_top = b_top.astype(np.int32).copy()
-    pts_top[:, 1] = np.clip(pts_top[:, 1] + int(round(shift_top)), 0, H - 1)
-    pts_bot = b_bot.astype(np.int32).copy()
-    pts_bot[:, 1] = np.clip(pts_bot[:, 1] + int(round(shift_bot)), 0, H - 1)
-    y_min = max(0, min(pts_top[:, 1].min(), pts_bot[:, 1].min()) - 1)
-    y_max = min(H, max(pts_top[:, 1].max(), pts_bot[:, 1].max()) + 2)
-    if y_max - y_min < 2:
-        return 0.0
-    x_min = max(0, x1 - 2)
-    x_max = min(W, x2 + 2)
-    if x_max - x_min < 2:
-        return 0.0
-    crop = region_map[y_min:y_max, x_min:x_max]
+    crop = sep_map[y_min:y_max, x_min:x_max]
     mask = np.zeros_like(crop, dtype=np.uint8)
-
-    def _draw(pts, mask, x_off, y_off):
-        local = pts.copy()
-        local[:, 0] -= x_off
-        local[:, 1] -= y_off
-        for k in range(len(local) - 1):
-            p0 = tuple(local[k])
-            p1 = tuple(local[k + 1])
-            cv2.line(mask, p0, p1, color=1, thickness=3)
-    _draw(pts_top, mask, x_min, y_min)
-    _draw(pts_bot, mask, x_min, y_min)
-    xs_start = max(0, x1 - x_min)
-    xs_end = min(mask.shape[1], x2 - x_min)
-    if xs_end <= xs_start:
+    local = pts.copy()
+    local[:, 0] -= x_min
+    local[:, 1] -= y_min
+    for k in range(len(local) - 1):
+        cv2.line(mask, (int(local[k][0]), int(local[k][1])),
+                 (int(local[k + 1][0]), int(local[k + 1][1])), color=1, thickness=3)
+    xs0 = max(0, int(x1) - x_min)
+    xs1 = min(mask.shape[1], int(x2) - x_min)
+    if xs1 <= xs0:
         return 0.0
-    sub_mask = mask[:, xs_start:xs_end]
-    sub_crop = crop[:, xs_start:xs_end]
-    n = int(sub_mask.sum())
+    val = float((mask[:, xs0:xs1] * crop[:, xs0:xs1]).sum())
+    return val / max(1.0, float(x2 - x1))
+
+
+def _pair_penalty(li: TextLine, lj: TextLine, sep_map: np.ndarray) -> float:
+    bi = np.asarray(li.baseline, dtype=float)
+    bj = np.asarray(lj.baseline, dtype=float)
+    x1 = max(bi[:, 0].min(), bj[:, 0].min())
+    x2 = min(bi[:, 0].max(), bj[:, 0].max())
+    if x2 - x1 <= 5:
+        return 1.0
+    if bi[:, 1].mean() < bj[:, 1].mean():
+        p1 = _separator_penalty(li.baseline, +li.heights[1], x1, x2, sep_map)
+        p2 = _separator_penalty(lj.baseline, -lj.heights[0], x1, x2, sep_map)
+    else:
+        p1 = _separator_penalty(li.baseline, -li.heights[0], x1, x2, sep_map)
+        p2 = _separator_penalty(lj.baseline, +lj.heights[1], x1, x2, sep_map)
+    return max(p1, p2)
+
+
+def _cluster_regions(lines: List[TextLine], sep_map: np.ndarray,
+                     paragraph_threshold: float = 0.25) -> List[List[TextLine]]:
+    n = len(lines)
     if n == 0:
-        return 0.0
-    return float((sub_mask * sub_crop).sum() / n)
-
-def _cluster_regions(lines: List[TextLine], region_map: np.ndarray, paragraph_threshold: float=0.15, x_overlap_min: int=5) -> List[List[TextLine]]:
-    if not lines:
         return []
+    if n == 1:
+        return [list(lines)]
     sorted_lines = sorted(lines, key=_line_center_y)
-    n = len(sorted_lines)
-    heights = [max(1.0, ln.heights[0] + ln.heights[1]) for ln in sorted_lines if sum(ln.heights) > 0]
-    median_h = float(np.median(heights)) if heights else 20.0
-    max_vertical_gap = 3.0 * median_h
-    x_ranges = [_line_x_range(ln) for ln in sorted_lines]
     cys = [_line_center_y(ln) for ln in sorted_lines]
-    baselines_np = [np.asarray(ln.baseline, dtype=np.int32) for ln in sorted_lines]
-    descs = [ln.heights[1] for ln in sorted_lines]
-    ascs = [ln.heights[0] for ln in sorted_lines]
+    xr = [_line_x_range(ln) for ln in sorted_lines]
+    tot_h = [max(1.0, ln.heights[0] + ln.heights[1]) for ln in sorted_lines]
+    median_h = float(np.median(tot_h))
+    max_vgap = 3.0 * median_h
+
     parent = list(range(n))
 
-    def find(x: int) -> int:
-        while parent[x] != x:
-            parent[x] = parent[parent[x]]
-            x = parent[x]
-        return x
+    def find(a: int) -> int:
+        while parent[a] != a:
+            parent[a] = parent[parent[a]]
+            a = parent[a]
+        return a
 
     def union(a: int, b: int) -> None:
-        ra, rb = (find(a), find(b))
+        ra, rb = find(a), find(b)
         if ra != rb:
             parent[ra] = rb
+
     for i in range(n):
-        xi0, xi1 = x_ranges[i]
-        cy_i = cys[i]
+        xi0, xi1 = xr[i]
+        cyi = cys[i]
         for j in range(i + 1, n):
-            cy_j = cys[j]
-            if cy_j - cy_i > max_vertical_gap:
+            if cys[j] - cyi > max_vgap:
                 break
-            xj0, xj1 = x_ranges[j]
-            x_overlap = max(0, min(xi1, xj1) - max(xi0, xj0))
-            if x_overlap < x_overlap_min:
+            xj0, xj1 = xr[j]
+            if min(xi1, xj1) - max(xi0, xj0) <= 5:
                 continue
-            v_gap = abs(cy_j - cy_i)
-            shorter_span = max(1, min(xi1 - xi0, xj1 - xj0))
-            if v_gap < 0.5 * median_h and x_overlap > shorter_span * 0.5:
+            if _pair_penalty(sorted_lines[i], sorted_lines[j], sep_map) < paragraph_threshold:
                 union(i, j)
-                continue
-            penalty = _path_penalty(baselines_np[i], baselines_np[j], shift_top=descs[i], shift_bot=-ascs[j], x1=max(xi0, xj0), x2=min(xi1, xj1), region_map=region_map)
-            if penalty < paragraph_threshold:
-                union(i, j)
+
     groups: dict = defaultdict(list)
     for i, ln in enumerate(sorted_lines):
         groups[find(i)].append(ln)
     return list(groups.values())
+
 
 def _assemble_regions(line_groups: List[List[TextLine]]) -> List[Region]:
     regions = []
@@ -350,6 +289,60 @@ def _assemble_regions(line_groups: List[List[TextLine]]) -> List[Region]:
         regions.append(Region(lines=ordered, polygon=_region_hull(ordered)))
     return regions
 
+
+def _split_bridged_columns(region: Region, sep_map: np.ndarray,
+                           min_side_lines: int = 3,
+                           max_bridge_frac: float = 0.25) -> List[Region]:
+    lines = region.lines
+    H, W = sep_map.shape
+    if len(lines) < 2 * min_side_lines:
+        return [region]
+    x0s = [min(x for x, _ in ln.baseline) for ln in lines]
+    x1s = [max(x for x, _ in ln.baseline) for ln in lines]
+    ys = [y for ln in lines for _, y in ln.baseline]
+    xmin, xmax = min(x0s), max(x1s)
+    ymin, ymax = min(ys), max(ys)
+    width = xmax - xmin
+    if width < 0.55 * W or width < 2:
+        return [region]
+
+    y0, y1 = max(0, ymin), min(H, ymax + 1)
+    cx0, cx1 = max(0, xmin), min(W, xmax + 1)
+    if y1 - y0 < 2 or cx1 - cx0 < 4:
+        return [region]
+    prof = sep_map[y0:y1, cx0:cx1].sum(axis=0)
+    lo, hi = int(0.25 * prof.size), int(0.75 * prof.size)
+    if hi - lo < 2:
+        return [region]
+    gi = lo + int(np.argmax(prof[lo:hi]))
+    peak = float(prof[gi])
+    med = float(np.median(prof)) + 1e-6
+    col_h = y1 - y0
+    if peak < 0.12 * col_h or peak < 4.0 * med:
+        return [region]
+    g = cx0 + gi
+
+    margin = 0.02 * width
+    left, right, bridge = [], [], []
+    for ln, a, b in zip(lines, x0s, x1s):
+        if b <= g + margin:
+            left.append(ln)
+        elif a >= g - margin:
+            right.append(ln)
+        else:
+            bridge.append(ln)
+    if (len(left) < min_side_lines or len(right) < min_side_lines
+            or len(bridge) > max_bridge_frac * len(lines)):
+        return [region]
+
+    out = []
+    for grp in (left, right, bridge):
+        if grp:
+            ordered = sorted(grp, key=_line_center_y)
+            out.append(Region(lines=ordered, polygon=_region_hull(ordered)))
+    return out
+
+
 def _region_bbox(r: Region) -> Tuple[int, int, int, int]:
     pts = r.polygon if r.polygon else [p for ln in r.lines for p in ln.polygon]
     if not pts:
@@ -357,6 +350,7 @@ def _region_bbox(r: Region) -> Tuple[int, int, int, int]:
     xs = [p[0] for p in pts]
     ys = [p[1] for p in pts]
     return (min(xs), min(ys), max(xs), max(ys))
+
 
 def _order_regions(regions: List[Region]) -> List[Region]:
     if not regions:
@@ -395,105 +389,14 @@ def _order_regions(regions: List[Region]) -> List[Region]:
             out.append(regions[i])
     return out
 
-def _split_columns(group: List[TextLine], page_w: int) -> List[List[TextLine]]:
-    if len(group) < 6:
-        return [group]
-    xr = [_line_x_range(ln) for ln in group]
-    x0 = min(a for a, _ in xr)
-    x1 = max(b for _, b in xr)
-    span = x1 - x0
-    widths = sorted(b - a for a, b in xr)
-    med_w = max(1.0, widths[len(widths) // 2])
-    if span < 1.6 * med_w:
-        return [group]
-    narrow = [(a, b) for a, b in xr if (b - a) < 0.6 * span]
-    if len(narrow) < 4:
-        return [group]
-    lo = max(int(0.25 * span), 1)
-    hi = int(0.75 * span)
-    if hi <= lo:
-        return [group]
-    starts = np.array([a for a, _ in narrow])
-    ends = np.array([b for _, b in narrow])
-    gutter, best = None, 0
-    for c, mass in _covote_corridors(starts, ends, x0, x1, med_w, len(narrow)):
-        if x0 + lo < c < x0 + hi and mass > best:
-            best, gutter = mass, int(c)
-    if gutter is None:
-        return [group]
-    left, right, wide = [], [], []
-    for ln, (a, b) in zip(group, xr):
-        if a < gutter - 10 and b > gutter + 10:
-            wide.append(ln)
-        elif (a + b) / 2.0 < gutter:
-            left.append(ln)
-        else:
-            right.append(ln)
-    if len(left) < 2 or len(right) < 2:
-        return [group]
-    out = []
-    if wide:
-        out.append(wide)
-    out.extend(_split_columns(left, page_w))
-    out.extend(_split_columns(right, page_w))
-    return out
-
-def _horizontal_dividers(page_gray: np.ndarray) -> List[int]:
-    if page_gray is None:
-        return []
-    Hd, Wd = page_gray.shape
-    bw = (page_gray < 128).astype(np.uint8)
-    k = max(8, Wd // 15)
-    horiz = cv2.morphologyEx(bw, cv2.MORPH_OPEN, cv2.getStructuringElement(cv2.MORPH_RECT, (k, 1)))
-    rowsum = horiz.sum(axis=1)
-    cand = np.where(rowsum > 0.5 * Wd)[0]
-    if cand.size == 0:
-        return []
-    out = []
-    tol = max(2, Hd // 200)
-    s = p = int(cand[0])
-    for y in cand[1:]:
-        y = int(y)
-        if y - p <= tol:
-            p = y
-        else:
-            out.append((s + p) // 2)
-            s = p = y
-    out.append((s + p) // 2)
-    return out
-
-def _split_at_dividers(groups: List[List[TextLine]], dividers: List[int]) -> List[List[TextLine]]:
-    if not dividers:
-        return groups
-    ds = sorted(dividers)
-    out = []
-    for g in groups:
-        if len(g) < 2:
-            out.append(g)
-            continue
-        ys = [_line_center_y(ln) for ln in g]
-        cuts = [d for d in ds if min(ys) < d < max(ys)]
-        if not cuts:
-            out.append(g)
-            continue
-        edges = [-1.0e9] + cuts + [1.0e9]
-        for a, b in zip(edges[:-1], edges[1:]):
-            seg = [ln for ln, y in zip(g, ys) if a < y <= b]
-            if seg:
-                out.append(seg)
-    return out
 
 def maps_to_regions(maps: np.ndarray, page_gray: np.ndarray = None) -> List[Region]:
-    binary_initial, median_asc = _binarize(maps)
-    lines = _extract_lines(maps, binary_initial, median_asc)
+    lines = _extract_lines(maps)
     if not lines:
         return []
-    reg_map = np.maximum(maps[:, :, 4], 0)
-    line_groups = _cluster_regions(lines, reg_map)
-    page_w = maps.shape[1]
-    split_groups = []
-    for g in line_groups:
-        split_groups.extend(_split_columns(g, page_w))
-    split_groups = _split_at_dividers(split_groups, _horizontal_dividers(page_gray))
-    regions = _assemble_regions(split_groups)
+    sep_map = np.maximum(maps[:, :, 4], 0)
+    lines = _merge_line_fragments(lines, sep_map)
+    groups = _cluster_regions(lines, sep_map)
+    regions = _assemble_regions(groups)
+    regions = [r2 for r in regions for r2 in _split_bridged_columns(r, sep_map)]
     return _order_regions(regions)

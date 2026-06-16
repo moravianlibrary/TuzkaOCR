@@ -11,6 +11,21 @@ from .postprocess import maps_to_regions, Region
 DOWNSAMPLE         = 3
 MAX_ORIGINAL_WIDTH = 1500
 MAX_SIDE           = 1536
+WIDE_ASPECT        = 1.2     
+GUTTER_RATIO       = 0.25    
+                            
+
+def _has_central_gutter(img_bgr: np.ndarray) -> bool:
+    g = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+    H, W = g.shape
+    if W < 10:
+        return False
+    ink = (g < 128).mean(axis=0)
+    k = max(3, W // 200)
+    ink = np.convolve(ink, np.ones(k) / k, mode="same")
+    med = float(np.median(ink[int(0.05 * W):int(0.95 * W)])) + 1e-6
+    c0, c1 = int(0.42 * W), int(0.58 * W)
+    return float(ink[c0:c1].min()) < GUTTER_RATIO * med
 
 
 def _sigmoid_inplace(x: np.ndarray) -> None:
@@ -87,7 +102,7 @@ class LayoutDetector:
 
     def detect(self, img_bgr: np.ndarray, downsample: int | None = None) -> tuple[list[Region], float]:
         orig_h, orig_w = img_bgr.shape[:2]
-        if orig_w > orig_h * 1.2:
+        if orig_w > orig_h * WIDE_ASPECT and _has_central_gutter(img_bgr):
             return self._detect_split(img_bgr, downsample)
 
         maps, img_scale, gray = self.get_maps(img_bgr, downsample)

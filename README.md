@@ -47,7 +47,7 @@ Both layout and OCR models are ONNX, served via ONNX Runtime.
 Default models:
 
 ```text
-dec-A-v4.onnx
+dec-B-v2.onnx
 rec-E-v5.int8.onnx
 vocab.json
 ```
@@ -59,7 +59,7 @@ dec-A-v3k5.onnx
 rec-E-v4k7.int8.onnx
 ```
 
-The resulting ALTO XML records both the layout and recognition models under `<OCRProcessing>/<ocrProcessingStep>` entries (`<processingStepDescription>` = `layout` / `recognition`), so downstream consumers see the explicit provenance pair, e.g. `dec-A-v4` + `rec-E-v5.int8` for default, or `dec-A-v3k5` + `rec-E-v4k7.int8` for Kramarky.
+The resulting ALTO XML records both the layout and recognition models under `<OCRProcessing>/<ocrProcessingStep>` entries (`<processingStepDescription>` = `layout` / `recognition`), so downstream consumers see the explicit provenance pair, e.g. `dec-B-v2` + `rec-E-v5.int8` for default, or `dec-A-v3k5` + `rec-E-v4k7.int8` for Kramarky.
 
 ## Platform support
 
