@@ -230,6 +230,7 @@ async def get_status(job_id: str, request: Request, caller_name: Optional[str] =
         "job_id":      job.id,
         "status":      job.status,
         "created_at":  job.created_at.isoformat(),
+        "started_at":  job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
         "error":       job.error,
     }

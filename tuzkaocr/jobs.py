@@ -18,6 +18,7 @@ class Job:
     id: str
     status: Literal["queued", "running", "done", "failed"]
     created_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
+    started_at: Optional[datetime] = None
     finished_at: Optional[datetime] = None
     result_paths: list[Path] = field(default_factory=list)
     error: Optional[str] = None
@@ -64,6 +65,7 @@ class JobStore:
             job = self._jobs.get(job_id)
             if job:
                 job.status = "running"
+                job.started_at = datetime.now(timezone.utc)
         try:
             result = process_fn()
             paths: list[Path] = []
