@@ -244,8 +244,9 @@ class PageProcessor:
         use_role = cfg.role_classifier if role_classifier is None else role_classifier
         if use_role:
             if self._role is None:
-                self._role = RoleClassifier(str(_models.resolve(cfg.role_model)))
-            self._role.classify_blocks(blocks, img_h, img_w)
+                self._role = RoleClassifier(str(_models.resolve(cfg.role_model)),
+                                            device=cfg.device, threads=cfg.ocr_threads)
+            self._role.classify_blocks(blocks, img_bgr)
 
         return img_h, img_w, blocks
 

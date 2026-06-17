@@ -59,7 +59,7 @@ dec-A-v3k5.onnx
 rec-E-v4k7.int8.onnx
 ```
 
-The resulting ALTO XML records both the layout and recognition models under `<OCRProcessing>/<ocrProcessingStep>` entries (`<processingStepDescription>` = `layout` / `recognition`), so downstream consumers see the explicit provenance pair, e.g. `dec-B-v2` + `rec-E-v5.int8` for default, or `dec-A-v3k5` + `rec-E-v4k7.int8` for Kramarky.
+The resulting ALTO XML records the layout and recognition models as two `<OCRProcessing>` elements (`IdLayout` / `IdRecognition`, each with an `<ocrProcessingStep>` whose `<processingStepDescription>` is `layout` / `recognition`), so downstream consumers see the explicit provenance pair, e.g. `dec-B-v2` + `rec-E-v5.int8` for default, or `dec-A-v3k5` + `rec-E-v4k7.int8` for Kramarky.
 
 ## Platform support
 
@@ -212,7 +212,7 @@ TUZKAOCR_HEIGHT_SCALE=1.0           # line-height multiplier
 TUZKAOCR_ADAPTIVE_DOWNSAMPLE=true   # true = recover dense pages via adaptive downsampling
 TUZKAOCR_CPU_MEM_ARENA=true         # false = release RAM to OS between pages (see Memory below)
 TUZKAOCR_ROLE_CLASSIFIER=false      # true = tag each ALTO TextLine with role (body/heading/...)
-TUZKAOCR_ROLE_MODEL=role-G-v1.npz   # bundled role classifier model
+TUZKAOCR_ROLE_MODEL=role-H5.onnx    # bundled role classifier model
 TUZKAOCR_RESULTS_DIR=results        # stored API results
 TUZKAOCR_MAX_JOB_AGE_HOURS=24       # result cleanup age (in-memory jobs + disk files)
 TUZKAOCR_MAX_QUEUE=16               # max simultaneous queued+running jobs (503 above this)
@@ -237,9 +237,9 @@ The CLI exposes `--no-adaptive` to force the fixed single-pass path.
 
 ## Line role classification (experimental)
 
-Off by default. When enabled, every recognized line is tagged with one of `body`, `prominent` (title / heading), `pagenum`, or `header` (running page header), and the role surfaces as a `TYPE` attribute on each `<TextLine>` in the ALTO output.
+Off by default. When enabled, every recognized line is tagged with one of `body`, `heading` (title / section heading), `header` (running page header), `footer` (running page footer), or `page_number`. Each role surfaces as an ALTO `<StructureTag>` (in `<Tags>`) referenced from the relevant `<TextLine>` via `TAGREFS`.
 
-It runs once per page after OCR completes; cost is well under 5 ms per typical page.
+It runs once per page after OCR completes; cost is a few ms per typical page.
 
 Three ways to enable, identical effect:
 

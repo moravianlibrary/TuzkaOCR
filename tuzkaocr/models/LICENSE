@@ -13,6 +13,7 @@ including but not limited to:
 - dec-B-v2.onnx
 - rec-E-v5.int8.onnx
 - rec-E-v4k7.int8.onnx
+- role-H5.onnx
 - role-G-v1.npz
 - vocab.json
 

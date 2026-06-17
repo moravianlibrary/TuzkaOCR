@@ -49,7 +49,7 @@ class Config:
     cpu_mem_arena: bool = field(default_factory=lambda: _env("CPU_MEM_ARENA", True))
 
     role_classifier: bool = field(default_factory=lambda: _env("ROLE_CLASSIFIER", False))
-    role_model:      str  = field(default_factory=lambda: _env("ROLE_MODEL", "role-G-v1.npz"))
+    role_model:      str  = field(default_factory=lambda: _env("ROLE_MODEL", "role-H5.onnx"))
 
     results_dir:        str = field(default_factory=lambda: _env("RESULTS_DIR",        "results"))
     max_job_age_hours:  int = field(default_factory=lambda: _env("MAX_JOB_AGE_HOURS",  24))

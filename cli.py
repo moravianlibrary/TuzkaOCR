@@ -62,7 +62,7 @@ def main() -> None:
                    help="Disable adaptive downsampling (use fixed DS3 layout)")
     p.set_defaults(adaptive=True)
     p.add_argument("--role-classifier", dest="role_classifier", action="store_true",
-                   help="Tag each line with role (body/prominent/pagenum/header) in ALTO TYPE attr")
+                   help="Tag each line with role (body/heading/header/footer/page_number) in ALTO TYPE attr")
     p.set_defaults(role_classifier=False)
 
     args = p.parse_args()
