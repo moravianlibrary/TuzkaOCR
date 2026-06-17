@@ -177,7 +177,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app = FastAPI(
         title="tuzkaocr",
         description="OCR pipeline for scanned page and document images — ALTO XML or text output",
-        version="1.3.0",
+        version="1.4.0",
         lifespan=lifespan,
     )
 
