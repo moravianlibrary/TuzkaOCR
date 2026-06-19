@@ -129,6 +129,27 @@ def _pitch_calibrate(lines) -> None:
             ln.heights = (asc * scale, ln.heights[1] * scale)
 
 
+def _layout_starved(lp: dict) -> bool:
+    return (lp["lineh"] < adaptive.MIN_LINE_HEIGHT_PX
+            or lp["pitch"] < adaptive.PITCH_RATIO_THRESH
+            or lp["wide"] > adaptive.WIDE_FRAC_THRESH)
+
+
+def _choose_recognized(recognized: List[dict], base_lp: dict) -> dict:
+    if len(recognized) == 1:
+        return recognized[0]
+    base = recognized[0]
+    base_starved = (base["pitch"] < adaptive.PITCH_RATIO_THRESH
+                    or base["mean_conf"] < adaptive.UNREADABLE_CONF
+                    or base["lineh"] < adaptive.MIN_LINE_HEIGHT_PX)
+    cand = max(recognized, key=lambda v: v["mean_conf"])
+    accept = (cand["ds"] != base["ds"]
+              and cand["mean_conf"] > base["mean_conf"] + adaptive.SELECT_MARGIN
+              and (base_starved
+                   or cand["n_lines"] <= adaptive.LINE_INFLATE_FACTOR * max(1, base_lp["n_lines"])))
+    return cand if accept else base
+
+
 def _blocks_to_text(blocks: List[dict]) -> str:
     parts = []
     for block in blocks:
@@ -165,34 +186,33 @@ class PageProcessor:
         self._layout_model_path = layout_path
         self._role: Optional[RoleClassifier] = None
 
-    def _detect_ocr(self, img_bgr: np.ndarray, hs: float,
-                    downsample: Optional[int]) -> dict:
+    def _layout_pass(self, img_bgr: np.ndarray, downsample: Optional[int]) -> dict:
         regions, img_scale = self.detector.detect(img_bgr, downsample)
-        n_lines = sum(len(r.lines) for r in regions)
-        pitch = adaptive.min_pitch_ratio(regions, img_scale)
-        wide = adaptive.wide_line_frac(regions, img_scale, img_bgr.shape[1])
-        lineh = adaptive.median_line_height(regions)
+        return {"regions": regions, "img_scale": img_scale,
+                "n_lines": sum(len(r.lines) for r in regions),
+                "pitch": adaptive.min_pitch_ratio(regions, img_scale),
+                "wide": adaptive.wide_line_frac(regions, img_scale, img_bgr.shape[1]),
+                "lineh": adaptive.median_line_height(regions)}
 
+    def _recognize_pass(self, img_bgr: np.ndarray, hs: float, lp: dict) -> dict:
+        img_scale = lp["img_scale"]
         line_data: List[_LineInput] = []
-        for ri, region in enumerate(regions):
+        for ri, region in enumerate(lp["regions"]):
             _pitch_calibrate(region.lines)
             for line in region.lines:
-                asc  = line.heights[0] * hs
-                desc = line.heights[1] * hs
-                gray, M = _extract_crop(img_bgr, line.baseline, asc, desc, ds=img_scale)
+                gray, M = _extract_crop(img_bgr, line.baseline,
+                                        line.heights[0] * hs, line.heights[1] * hs, ds=img_scale)
                 if gray is None:
                     continue
                 line_data.append(_LineInput(gray=gray, M=M, region_idx=ri))
-
         results = (self.recognizer.run_lines([d.gray for d in line_data],
                                              workers=self.config.line_workers)
                    if line_data else [])
         confs = [c for (t, _, c) in results if t.strip()]
         mean_conf = float(np.mean(confs)) if confs else 0.0
-
-        return {"line_data": line_data, "results": results,
-                "mean_conf": mean_conf, "pitch": pitch, "n_lines": n_lines,
-                "wide": wide, "lineh": lineh}
+        return {"line_data": line_data, "results": results, "mean_conf": mean_conf,
+                "pitch": lp["pitch"], "n_lines": lp["n_lines"],
+                "wide": lp["wide"], "lineh": lp["lineh"]}
 
     @staticmethod
     def _assemble_blocks(line_data: List[_LineInput], results: list) -> List[dict]:
@@ -219,27 +239,33 @@ class PageProcessor:
 
     def _run(self, img_bgr: np.ndarray,
              height_scale: Optional[float] = None,
-             role_classifier: Optional[bool] = None) -> Tuple[int, int, List[dict]]:
+             role_classifier: Optional[bool] = None) -> Tuple[int, int, List[dict], float]:
         img_h, img_w = img_bgr.shape[:2]
         cfg = self.config
         hs = cfg.height_scale if height_scale is None else height_scale
 
         if not cfg.adaptive_downsample:
-            r = self._detect_ocr(img_bgr, hs, None)
-            blocks = self._assemble_blocks(r["line_data"], r["results"])
+            lp = self._layout_pass(img_bgr, None)
+            chosen = self._recognize_pass(img_bgr, hs, lp)
         else:
-            visited = []
-            for k, ds in enumerate(adaptive.DS_LEVELS):
-                r = self._detect_ocr(img_bgr, hs, ds)
-                visited.append({"ds": ds, "conf": r["mean_conf"],
-                                "n_lines": r["n_lines"], "pitch": r["pitch"],
-                                "wide": r["wide"], "lineh": r["lineh"], "r": r})
-                if k == len(adaptive.DS_LEVELS) - 1:
+            levels = adaptive.DS_LEVELS
+            base_lp = None
+            recognized = []
+            for k, ds in enumerate(levels):
+                lp = self._layout_pass(img_bgr, ds)
+                if base_lp is None:
+                    base_lp = lp
+                is_last = k == len(levels) - 1
+                if _layout_starved(lp) and not is_last:
+                    continue
+                r = self._recognize_pass(img_bgr, hs, lp)
+                r["ds"] = ds
+                recognized.append(r)
+                if is_last or r["mean_conf"] >= adaptive.OCR_CONF_THRESH:
                     break
-                if not adaptive.starved(r["pitch"], r["mean_conf"], r["wide"], r["lineh"]):
-                    break
-            chosen = adaptive.choose(visited)["r"]
-            blocks = self._assemble_blocks(chosen["line_data"], chosen["results"])
+            chosen = _choose_recognized(recognized, base_lp)
+
+        blocks = self._assemble_blocks(chosen["line_data"], chosen["results"])
 
         use_role = cfg.role_classifier if role_classifier is None else role_classifier
         if use_role:
@@ -248,25 +274,30 @@ class PageProcessor:
                                             device=cfg.device, threads=cfg.ocr_threads)
             self._role.classify_blocks(blocks, img_bgr)
 
-        return img_h, img_w, blocks
+        return img_h, img_w, blocks, float(chosen["mean_conf"])
 
     def process(self, img_bgr: np.ndarray, page_id: str = "page",
                 fmt: str = "alto", height_scale: Optional[float] = None,
-                role_classifier: Optional[bool] = None):
-        img_h, img_w, blocks = self._run(img_bgr, height_scale=height_scale,
-                                         role_classifier=role_classifier)
+                role_classifier: Optional[bool] = None, with_meta: bool = False):
+        img_h, img_w, blocks, mean_conf = self._run(img_bgr, height_scale=height_scale,
+                                                    role_classifier=role_classifier)
         software_name = self._ocr_model_path.stem
         layout_name = self._layout_model_path.stem
         if fmt == "multi":
-            return {
+            content = {
                 "alto": build_alto(page_id, img_h, img_w, blocks,
                                    software_name=software_name, layout_name=layout_name),
                 "txt":  _blocks_to_text(blocks),
             }
-        if fmt == "txt":
-            return _blocks_to_text(blocks)
-        return build_alto(page_id, img_h, img_w, blocks,
-                          software_name=software_name, layout_name=layout_name)
+        elif fmt == "txt":
+            content = _blocks_to_text(blocks)
+        else:
+            content = build_alto(page_id, img_h, img_w, blocks,
+                                 software_name=software_name, layout_name=layout_name)
+        if with_meta:
+            n_lines = sum(len(b["lines"]) for b in blocks)
+            return content, {"mean_conf": round(mean_conf, 4), "n_lines": n_lines}
+        return content
 
     def process_file(self, image_path: str | Path, out_path: str | Path | None = None,
                      fmt: str = "alto"):

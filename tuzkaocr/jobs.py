@@ -22,6 +22,8 @@ class Job:
     finished_at: Optional[datetime] = None
     result_paths: list[Path] = field(default_factory=list)
     error: Optional[str] = None
+    mean_conf: Optional[float] = None
+    n_lines: Optional[int] = None
 
 
 class JobStoreFull(Exception):
@@ -68,6 +70,9 @@ class JobStore:
                 job.started_at = datetime.now(timezone.utc)
         try:
             result = process_fn()
+            meta: dict = {}
+            if isinstance(result, tuple) and len(result) == 2 and isinstance(result[1], dict):
+                result, meta = result
             paths: list[Path] = []
             if isinstance(result, dict):
                 for key, content in result.items():
@@ -87,6 +92,8 @@ class JobStore:
                     job.status       = "done"
                     job.finished_at  = datetime.now(timezone.utc)
                     job.result_paths = paths
+                    job.mean_conf    = meta.get("mean_conf")
+                    job.n_lines      = meta.get("n_lines")
         except Exception as exc:
             with self._lock:
                 job = self._jobs.get(job_id)

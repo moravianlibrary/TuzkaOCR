@@ -148,7 +148,7 @@ def _submit(request: Request, img: np.ndarray, page_id: str,
 
     def work():
         return processor.process(img, page_id=page_id, fmt=fmt,
-                                 role_classifier=role_classifier)
+                                 role_classifier=role_classifier, with_meta=True)
 
     result_ext = ".txt" if fmt == "txt" else ".xml"
     try:
@@ -232,6 +232,8 @@ async def get_status(job_id: str, request: Request, caller_name: Optional[str] =
         "created_at":  job.created_at.isoformat(),
         "started_at":  job.started_at.isoformat() if job.started_at else None,
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
+        "mean_conf":   job.mean_conf,
+        "n_lines":     job.n_lines,
         "error":       job.error,
     }
 
@@ -288,6 +290,8 @@ async def status_legacy(job_id: str, request: Request, caller_name: Optional[str
     return {
         "id":    job.id,
         "state": "success" if job.status == "done" else job.status,
+        "mean_conf": job.mean_conf,
+        "n_lines":   job.n_lines,
         "error": job.error or "",
     }
 
