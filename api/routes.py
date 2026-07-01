@@ -95,12 +95,12 @@ def _decode_image(data: bytes, max_pixels: int) -> np.ndarray:
 
 
 def _validate_domain(domain: Optional[str]) -> Optional[str]:
-    if domain in (None, ""):
+    if domain in (None, "", "default"):
         return None
     if domain not in ALLOWED_DOMAINS:
         raise HTTPException(
             status_code=400,
-            detail=f"Unknown domain '{domain}'. Allowed: {sorted(ALLOWED_DOMAINS)}",
+            detail=f"Unknown domain '{domain}'. Allowed: {['default'] + sorted(ALLOWED_DOMAINS)}",
         )
     return domain
 
