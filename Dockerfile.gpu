@@ -8,15 +8,16 @@ ENV DEBIAN_FRONTEND=noninteractive \
 WORKDIR /app
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        python3.11 python3.11-pip python3.11-dev \
+        python3.11 python3.11-dev python3.11-venv \
         libglib2.0-0 libgl1 \
     && ln -sf python3.11 /usr/bin/python3 \
-    && ln -sf pip3 /usr/bin/pip \
+    && python3.11 -m ensurepip --upgrade \
+    && python3.11 -m pip install --no-cache-dir --upgrade pip \
     && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt .
 RUN sed -i '/^onnxruntime==/d' requirements.txt \
-    && pip install --no-cache-dir -r requirements.txt onnxruntime-gpu==1.25.1
+    && python3.11 -m pip install --no-cache-dir -r requirements.txt onnxruntime-gpu==1.25.1
 
 COPY tuzkaocr/ tuzkaocr/
 COPY api/      api/
