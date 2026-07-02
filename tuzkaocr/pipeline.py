@@ -163,6 +163,7 @@ class PageProcessor:
     def __init__(self, config: Config):
         self.config = config
         device_str = config.resolve_device()
+        cuda_opts = config.cuda_provider_options()
 
         layout_path = _models.resolve(config.layout_model)
         ocr_path    = _models.resolve(config.ocr_model)
@@ -173,6 +174,7 @@ class PageProcessor:
             device=device_str,
             threads=config.ocr_threads,
             cpu_mem_arena=config.cpu_mem_arena,
+            cuda_opts=cuda_opts,
         )
         self.recognizer = OnnxRecognizer(
             str(ocr_path),
@@ -181,6 +183,7 @@ class PageProcessor:
             threads=config.ocr_threads,
             max_width=config.max_width,
             cpu_mem_arena=config.cpu_mem_arena,
+            cuda_opts=cuda_opts,
         )
         self._ocr_model_path = ocr_path
         self._layout_model_path = layout_path
@@ -271,7 +274,8 @@ class PageProcessor:
         if use_role:
             if self._role is None:
                 self._role = RoleClassifier(str(_models.resolve(cfg.role_model)),
-                                            device=cfg.device, threads=cfg.ocr_threads)
+                                            device=cfg.device, threads=cfg.ocr_threads,
+                                            cuda_opts=cfg.cuda_provider_options())
             self._role.classify_blocks(blocks, img_bgr)
 
         return img_h, img_w, blocks, float(chosen["mean_conf"])

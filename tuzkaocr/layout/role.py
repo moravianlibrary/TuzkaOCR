@@ -7,6 +7,8 @@ import cv2
 import numpy as np
 import onnxruntime as ort
 
+from ..ort_session import build_providers
+
 CLASSES = ["body", "heading", "header", "footer", "page_number"]
 TAU = {"heading": 0.6, "header": 0.6, "footer": 0.6, "page_number": 0.5}
 _CROP_H, _CROP_W = 32, 256
@@ -30,10 +32,11 @@ def _clamp(v, lo, hi):
 
 class RoleClassifier:
 
-    def __init__(self, onnx_path: str | Path, device: str = "cpu", threads: int = 4):
+    def __init__(self, onnx_path: str | Path, device: str = "cpu", threads: int = 4,
+                 cuda_opts: dict | None = None):
         opts = ort.SessionOptions()
         opts.intra_op_num_threads = threads
-        providers = ["CUDAExecutionProvider", "CPUExecutionProvider"] if device == "cuda" else ["CPUExecutionProvider"]
+        providers = build_providers(device, cuda_opts)
         self.session = ort.InferenceSession(str(onnx_path), sess_options=opts, providers=providers)
         self.classes = CLASSES
         self._body = CLASSES.index("body")

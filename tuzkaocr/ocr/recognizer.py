@@ -7,6 +7,8 @@ from typing import List, Tuple
 import numpy as np
 import onnxruntime as ort
 
+from ..ort_session import build_providers
+
 from .vocab import load_vocab
 
 WordSpan = Tuple[str, int, int]
@@ -57,7 +59,7 @@ def _greedy_ctc(logits: np.ndarray, chars: List[str]) -> LineResult:
 class OnnxRecognizer:
     def __init__(self, model_path: str | Path, vocab_path: str | Path | None = None,
                  device: str = "cpu", threads: int = 4, max_width: int = 1600,
-                 cpu_mem_arena: bool = True):
+                 cpu_mem_arena: bool = True, cuda_opts: dict | None = None):
         self.chars, _ = load_vocab(vocab_path)
         self.max_width = max_width
 
@@ -66,10 +68,7 @@ class OnnxRecognizer:
         opts.inter_op_num_threads = max(1, threads // 2)
         opts.enable_cpu_mem_arena = cpu_mem_arena
 
-        if device == "cuda":
-            providers = ["CUDAExecutionProvider", "CPUExecutionProvider"]
-        else:
-            providers = ["CPUExecutionProvider"]
+        providers = build_providers(device, cuda_opts)
 
         self.session = ort.InferenceSession(
             str(model_path), sess_options=opts, providers=providers
