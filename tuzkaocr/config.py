@@ -51,9 +51,18 @@ class Config:
     # CUDA memory bounding (see tuzkaocr/ort_session.py). Defaults chosen to keep GPU memory
     # bounded across varied input shapes; the old (unbounded) behavior is EXHAUSTIVE +
     # kNextPowerOfTwo. gpu_mem_limit_mb=0 leaves the arena uncapped.
-    cudnn_conv_algo_search: str = field(default_factory=lambda: _env("CUDNN_CONV_ALGO_SEARCH", "HEURISTIC"))
-    arena_extend_strategy:  str = field(default_factory=lambda: _env("ARENA_EXTEND_STRATEGY", "kSameAsRequested"))
-    gpu_mem_limit_mb:       int = field(default_factory=lambda: _env("GPU_MEM_LIMIT_MB", 0))
+    #
+    # The two models have opposite allocation profiles, so they need different arena
+    # strategies:
+    #   - fixed-shape models (layout, role) see a few repeated shapes -> kSameAsRequested
+    #     allocates exactly what's needed with no over-reservation;
+    #   - the recognizer sees a different line width almost every call -> kSameAsRequested
+    #     would allocate an unreusable block per width and climb to a VRAM OOM (GRU node),
+    #     so it uses kNextPowerOfTwo, which buckets sizes into reusable blocks.
+    cudnn_conv_algo_search:        str = field(default_factory=lambda: _env("CUDNN_CONV_ALGO_SEARCH", "HEURISTIC"))
+    arena_extend_strategy:         str = field(default_factory=lambda: _env("ARENA_EXTEND_STRATEGY", "kSameAsRequested"))
+    recognizer_arena_extend_strategy: str = field(default_factory=lambda: _env("RECOGNIZER_ARENA_EXTEND_STRATEGY", "kNextPowerOfTwo"))
+    gpu_mem_limit_mb:              int = field(default_factory=lambda: _env("GPU_MEM_LIMIT_MB", 0))
 
     role_classifier: bool = field(default_factory=lambda: _env("ROLE_CLASSIFIER", False))
     role_model:      str  = field(default_factory=lambda: _env("ROLE_MODEL", "role-H5.onnx"))
@@ -106,11 +115,14 @@ class Config:
         if errors:
             raise RuntimeError("Invalid configuration:\n  - " + "\n  - ".join(errors))
 
-    def cuda_provider_options(self) -> dict:
-        """CUDAExecutionProvider options that keep GPU memory bounded across varied shapes."""
+    def cuda_provider_options(self, arena_extend_strategy: str | None = None) -> dict:
+        """CUDAExecutionProvider options that keep GPU memory bounded across varied shapes.
+
+        arena_extend_strategy overrides the default (used for the variable-width recognizer).
+        """
         opts = {
             "cudnn_conv_algo_search": self.cudnn_conv_algo_search,
-            "arena_extend_strategy": self.arena_extend_strategy,
+            "arena_extend_strategy": arena_extend_strategy or self.arena_extend_strategy,
         }
         if self.gpu_mem_limit_mb > 0:
             opts["gpu_mem_limit"] = self.gpu_mem_limit_mb * 1024 * 1024

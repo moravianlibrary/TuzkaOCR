@@ -183,7 +183,8 @@ class PageProcessor:
             threads=config.ocr_threads,
             max_width=config.max_width,
             cpu_mem_arena=config.cpu_mem_arena,
-            cuda_opts=cuda_opts,
+            # variable line widths -> its own arena strategy (see Config)
+            cuda_opts=config.cuda_provider_options(config.recognizer_arena_extend_strategy),
         )
         self._ocr_model_path = ocr_path
         self._layout_model_path = layout_path
