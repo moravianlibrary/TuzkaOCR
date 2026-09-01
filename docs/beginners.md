@@ -60,8 +60,8 @@ outdated on Macs.
 
 1. Open the **[latest release page](https://github.com/moravianlibrary/TuzkaOCR/releases/latest)**.
 2. Scroll down to the **Assets** section and click **Source code (zip)**.
-3. Unzip the file you downloaded. You get a folder named after the version — for release
-   v1.7.0 it is `TuzkaOCR-1.7.0`.
+3. Unzip the file you downloaded. You get a folder named after the version — release
+   v1.7.1, for example, unzips to a folder called `TuzkaOCR-1.7.1`.
 4. Move that folder somewhere you can find again. Your Documents folder is fine.
 
 This page always shows the newest published version, so the link stays correct as new

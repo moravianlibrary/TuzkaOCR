@@ -42,7 +42,7 @@ Releases are tagged, so pin a known version rather than tracking `main` when rep
 matters:
 
 ```bash
-git checkout v1.7.0
+git checkout v1.7.1        # or any tag listed on the releases page
 pip install --force-reinstall --no-deps .
 ```
 
