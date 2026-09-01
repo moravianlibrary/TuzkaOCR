@@ -2,6 +2,23 @@
 
 Lightweight OCR pipeline for scanned page and document images, optimized for CPU inference. The system detects page layout and text lines, runs line-level OCR, maps recognized words back to source-image coordinates, and returns either ALTO XML with word bounding boxes or plain text.
 
+## Documentation
+
+Full documentation is in [`docs/`](docs/), published at
+**https://moravianlibrary.github.io/TuzkaOCR/**:
+
+| Page | Contents |
+|------|----------|
+| [Step by step (beginners)](docs/beginners.md) | Guided setup for readers new to the command line |
+| [Installation](docs/install.md) | Requirements, install from a checkout, upgrading |
+| [CLI](docs/cli.md) | Every flag, domains, batch processing |
+| [HTTP API](docs/api.md) | Endpoints, status codes, backpressure, auth, a client |
+| [Docker](docs/docker.md) | Compose services, storage, ownership, operations |
+| [Configuration](docs/configuration.md) | Every `TUZKAOCR_*` variable, memory sizing |
+| [Models and domains](docs/models.md) | What ships, how names resolve, pinning |
+| [Output formats](docs/output-formats.md) | ALTO structure, provenance, line roles |
+| [Troubleshooting](docs/troubleshooting.md) | Install, quality, memory, service errors |
+
 ## Features
 
 - Lightweight: ~12 MB of model artifacts, no GPU required, runs anywhere ONNX Runtime runs.
@@ -33,6 +50,8 @@ tuzkaocr/models/     Bundled layout and OCR model files (shipped in the wheel)
 results/             Runtime OCR outputs, mounted as persistent storage
 spool/               Optional host scratch for non-Compose deployments
 cli.py               Command-line entry point
+docs/                Documentation sources (MkDocs)
+mkdocs.yml           Documentation site configuration
 Dockerfile           CPU container image
 Dockerfile.gpu       GPU container image
 docker-compose.yml   Production-oriented Compose setup

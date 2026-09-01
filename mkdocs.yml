@@ -1,0 +1,80 @@
+site_name: TuzkaOCR
+site_description: OCR pipeline for scanned page and document images — ALTO XML or text output
+site_url: https://moravianlibrary.github.io/TuzkaOCR/
+site_author: Moravian Library
+
+repo_url: https://github.com/moravianlibrary/TuzkaOCR
+repo_name: moravianlibrary/TuzkaOCR
+edit_uri: edit/main/docs/
+
+copyright: Code Apache-2.0 · Models CC BY-NC-SA 4.0 · Moravian Library
+
+strict: true
+
+theme:
+  name: material
+  language: en
+  features:
+    - navigation.instant
+    - navigation.tracking
+    - navigation.sections
+    - navigation.top
+    - toc.follow
+    - content.code.copy
+    - content.action.edit
+    - search.suggest
+    - search.highlight
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-night
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: teal
+      accent: teal
+      toggle:
+        icon: material/weather-sunny
+        name: Switch to light mode
+  icon:
+    repo: fontawesome/brands/github
+
+nav:
+  - Overview: index.md
+  - Getting started:
+      - Step by step (beginners): beginners.md
+      - Installation: install.md
+      - CLI: cli.md
+  - Running as a service:
+      - HTTP API: api.md
+      - Docker: docker.md
+  - Reference:
+      - Configuration: configuration.md
+      - Models and domains: models.md
+      - Output formats: output-formats.md
+  - Troubleshooting: troubleshooting.md
+
+markdown_extensions:
+  - abbr
+  - admonition
+  - attr_list
+  - def_list
+  - footnotes
+  - md_in_html
+  - tables
+  - toc:
+      permalink: true
+  - pymdownx.details
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.snippets
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
+
+plugins:
+  - search
