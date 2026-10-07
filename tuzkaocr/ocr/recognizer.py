@@ -2,15 +2,26 @@ from __future__ import annotations
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from pathlib import Path
-from typing import List, Tuple
+from typing import List, NamedTuple, Tuple
 
 import numpy as np
 import onnxruntime as ort
 
 from .vocab import load_vocab
 
-WordSpan = Tuple[str, int, int]
-LineResult = Tuple[str, List[WordSpan], float]
+
+class WordSpan(NamedTuple):
+    text: str
+    t_start: int
+    t_end: int
+    char_ts: Tuple[int, ...] = ()
+    char_conf: Tuple[float, ...] = ()
+
+
+class LineResult(NamedTuple):
+    text: str
+    words: List[WordSpan]
+    confidence: float
 
 
 def _greedy_ctc(logits: np.ndarray, chars: List[str]) -> LineResult:
@@ -21,37 +32,43 @@ def _greedy_ctc(logits: np.ndarray, chars: List[str]) -> LineResult:
     probs /= probs.sum(axis=-1, keepdims=True)
     pmax = probs.max(axis=-1)
 
-    char_events: List[Tuple[str, int]] = []
-    confs: List[float] = []
+    events: List[Tuple[str, int, float]] = []
     prev = 0
     for t, idx in enumerate(best):
         if idx != 0 and idx != prev:
-            char_events.append((chars[idx - 1], t))
-            confs.append(float(pmax[t]))
+            events.append((chars[idx - 1], t, float(pmax[t])))
         prev = idx
 
-    transcription = "".join(c for c, _ in char_events)
-    confidence = float(np.mean(confs)) if confs else 0.0
+    transcription = "".join(char for char, _, _ in events)
+    confidence = float(np.mean([p for _, _, p in events])) if events else 0.0
 
     word_spans: List[WordSpan] = []
     word_chars: List[str] = []
+    word_ts: List[int] = []
+    word_ps: List[float] = []
     word_t_start: int | None = None
 
-    for char, t in char_events:
+    for char, t, p in events:
         if char == ' ':
             if word_chars:
-                word_spans.append(("".join(word_chars), word_t_start, t - 1))
+                word_spans.append(WordSpan("".join(word_chars), word_t_start, t - 1,
+                                           tuple(word_ts), tuple(word_ps)))
                 word_chars = []
+                word_ts = []
+                word_ps = []
                 word_t_start = None
         else:
             if word_t_start is None:
                 word_t_start = t
             word_chars.append(char)
+            word_ts.append(t)
+            word_ps.append(p)
 
     if word_chars:
-        word_spans.append(("".join(word_chars), word_t_start, t))
+        word_spans.append(WordSpan("".join(word_chars), word_t_start, word_ts[-1],
+                                   tuple(word_ts), tuple(word_ps)))
 
-    return transcription, word_spans, confidence
+    return LineResult(transcription, word_spans, confidence)
 
 
 class OnnxRecognizer:

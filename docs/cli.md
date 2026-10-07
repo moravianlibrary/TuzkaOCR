@@ -109,6 +109,29 @@ continues. The command exits non-zero only when the input directory contains no 
 | `--format` | `alto` | `alto`, `txt`, or `multi` |
 | `--batch` | off | Treat the input as a directory of images |
 
+### ALTO output
+
+| Option | Default | Effect |
+|---|---|---|
+| `--alto-profile` | `ndk` | `ndk` (Czech NDK ingest profile) or `basic` (pre-1.7.2 shape) |
+| `--alto-agency` | *unset* | Institution running the OCR, written as `processingAgency` |
+| `--alto-lang` | *detected* | Force the `LANG` value |
+| `--alto-dpi` | *from the image* | Force the resolution used for `FONTSIZE` |
+| `--alto-page-width-mm` | *unset* | Physical page width; the resolution is derived from it when the image records none |
+| `--source-identifier` | *none* | Identifier of the source image, written as `fileIdentifier` (single image only) |
+| `--physical-img-nr` | *from the filename* | Page number within the volume, >=1 (single image only) |
+| `--ndk-warn` | off | Report NDK fields that could not be filled |
+
+```bash
+tuzkaocr page.jpg --out result.alto.xml \
+    --alto-agency "Moravian Library" \
+    --source-identifier uuid:1bd9de34-435f-11dd-b505-00145e5790ea
+```
+
+None of these are needed for ordinary OCR; unknown values are left out of the ALTO.
+`--source-identifier` and `--physical-img-nr` are rejected together with `--batch`. See
+[Configuration](configuration.md#alto-output) and [Output formats](output-formats.md#profiles).
+
 ### Model selection
 
 | Option | Default | Effect |

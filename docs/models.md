@@ -46,10 +46,19 @@ Model files are installed as package data, so nothing is downloaded at first run
 | `rec-H-v3h-kurrent.int8.onnx` | 6.5 MB | Superseded Kurrent specialist |
 | `role-H5.onnx` | 1.1 MB | Line role classifier |
 | `vocab.json` | 888 B | Recognizer character set |
+| `lang-A-v1.npz` | 45 KB | Language identification for ALTO `LANG` |
 
 Recognizers are int8-quantized, which is what keeps a CPU deployment practical. The live
-list for a running service is available from
+list of selectable models for a running service is available from
 [`GET /api/v1/models`](api.md#listing-models).
+
+## Language identification
+
+`lang-A-v1.npz` sets the ALTO `LANG` attributes in the `ndk` profile. It is a small NumPy
+classifier over the recognized text, covering Czech, German,
+English, Slovak, Polish and Latin; text in other languages is declined and gets no `LANG`.
+One detector serves every domain. Replace it with `TUZKAOCR_LANG_MODEL`, or override its output
+with `TUZKAOCR_ALTO_LANG`. See [Output formats → Language](output-formats.md#language).
 
 ## How a model name is resolved
 
@@ -94,9 +103,11 @@ tuzkaocr page.jpg --domain kurrent --ocr-model rec-H-v3h-kurrent.int8.onnx
 
 ## Provenance in the output
 
-Every ALTO file records which pair produced it, as two `OCRProcessing` elements — so a
+Every ALTO file records which pair produced it, as two `Processing` elements — one for
+layout, one for recognition, each naming the model in `applicationDescription` — so a
 downstream consumer can tell a `rec-E-v5` page from a `rec-H-v6` one years later without
-external bookkeeping. See
+external bookkeeping. The legacy `basic` profile writes the same information as two
+deprecated `OCRProcessing` elements instead. See
 [Output formats](output-formats.md#model-provenance).
 
 ## Licensing

@@ -12,11 +12,12 @@ from fastapi.responses import PlainTextResponse
 from fastapi.security.api_key import APIKeyHeader
 
 from tuzkaocr import _models
-from tuzkaocr.images import ImageDecodeError, decode_image_path
+from tuzkaocr.images import ImageDecodeError, decode_image_path, read_image_dpi
 from tuzkaocr.jobs import JobInputError, JobStoreFull
 
 ALLOWED_DOMAINS = {"kramarky", "handwritten", "kurrent"}
 ALLOWED_FMTS = {"alto", "txt", "multi"}
+ALLOWED_ALTO_PROFILES = {"ndk", "basic"}
 ALLOWED_WHICH = {"alto", "txt"}
 SPOOL_PREFIX = "tuzkaocr-upload-"
 
@@ -101,6 +102,28 @@ def _validate_fmt(fmt: Optional[str]) -> str:
     return fmt
 
 
+def _validate_alto_profile(profile: Optional[str]) -> Optional[str]:
+    if profile in (None, ""):
+        return None
+    if profile not in ALLOWED_ALTO_PROFILES:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unknown alto_profile '{profile}'. Allowed: {sorted(ALLOWED_ALTO_PROFILES)}",
+        )
+    return profile
+
+
+def _validate_physical_img_nr(value: Optional[int]) -> Optional[int]:
+    if value is None:
+        return None
+    if value < 1:
+        raise HTTPException(
+            status_code=400,
+            detail=f"physical_img_nr must be >=1, got {value}",
+        )
+    return value
+
+
 def _spool_directory(spool_dir: Optional[str]) -> Path:
     return Path(spool_dir) if spool_dir else Path(tempfile.gettempdir())
 
@@ -155,9 +178,14 @@ async def _read_upload(upload: UploadFile, spool_dir: Optional[str] = None) -> P
 def _submit(request: Request, spool_path: Path, page_id: str,
             domain: Optional[str],
             caller: Optional[str], fmt: Optional[str] = None,
-            role_classifier: Optional[bool] = None) -> str:
+            role_classifier: Optional[bool] = None,
+            source_identifier: Optional[str] = None,
+            alto_profile: Optional[str] = None,
+            physical_img_nr: Optional[int] = None) -> str:
     domain = _validate_domain(domain)
     fmt = _validate_fmt(fmt)
+    alto_profile = _validate_alto_profile(alto_profile)
+    physical_img_nr = _validate_physical_img_nr(physical_img_nr)
     cache = request.app.state.cache
     store = request.app.state.store
     max_image_pixels = request.app.state.config.max_image_pixels
@@ -172,7 +200,12 @@ def _submit(request: Request, spool_path: Path, page_id: str,
         except ImageDecodeError as exc:
             raise JobInputError(str(exc)) from exc
         return processor.process(img, page_id=page_id, fmt=fmt,
-                                 role_classifier=role_classifier, with_meta=True)
+                                 role_classifier=role_classifier, with_meta=True,
+                                 source_file=page_id,
+                                 source_identifier=source_identifier,
+                                 profile=alto_profile,
+                                 dpi=read_image_dpi(spool_path),
+                                 physical_img_nr=physical_img_nr)
 
     result_ext = ".txt" if fmt == "txt" else ".xml"
     try:
@@ -232,7 +265,10 @@ def _reject_if_full(request: Request) -> None:
 async def _ingest_upload(request: Request, upload: UploadFile,
                          domain: Optional[str],
                          fmt: Optional[str], role_classifier: Optional[bool],
-                         caller_name: Optional[str]) -> str:
+                         caller_name: Optional[str],
+                         source_identifier: Optional[str] = None,
+                         alto_profile: Optional[str] = None,
+                         physical_img_nr: Optional[int] = None) -> str:
     _reject_if_full(request)
     cfg = request.app.state.config
     spool_path = await _read_upload(upload, cfg.spool_dir)
@@ -246,6 +282,9 @@ async def _ingest_upload(request: Request, upload: UploadFile,
             caller=caller_name,
             fmt=fmt,
             role_classifier=role_classifier,
+            source_identifier=source_identifier,
+            alto_profile=alto_profile,
+            physical_img_nr=physical_img_nr,
         )
         submitted = True
         return job_id
@@ -261,10 +300,16 @@ async def process_image(
     domain: Optional[str] = Form(None),
     fmt: Optional[str] = Form(None),
     role_classifier: Optional[bool] = Form(None),
+    source_identifier: Optional[str] = Form(None),
+    alto_profile: Optional[str] = Form(None),
+    physical_img_nr: Optional[int] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
     job_id = await _ingest_upload(request, image, domain, fmt,
-                                  role_classifier, caller_name)
+                                  role_classifier, caller_name,
+                                  source_identifier=source_identifier,
+                                  alto_profile=alto_profile,
+                                  physical_img_nr=physical_img_nr)
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -322,10 +367,16 @@ async def upload_legacy(
     domain: Optional[str] = Form(None),
     fmt: Optional[str] = Form(None),
     role_classifier: Optional[bool] = Form(None),
+    source_identifier: Optional[str] = Form(None),
+    alto_profile: Optional[str] = Form(None),
+    physical_img_nr: Optional[int] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
     job_id = await _ingest_upload(request, file, domain, fmt,
-                                  role_classifier, caller_name)
+                                  role_classifier, caller_name,
+                                  source_identifier=source_identifier,
+                                  alto_profile=alto_profile,
+                                  physical_img_nr=physical_img_nr)
     return {"id": job_id}
 
 

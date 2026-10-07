@@ -16,14 +16,14 @@ Full documentation is in [`docs/`](docs/), published at
 | [Docker](docs/docker.md) | Compose services, storage, ownership, operations |
 | [Configuration](docs/configuration.md) | Every `TUZKAOCR_*` variable, memory sizing |
 | [Models and domains](docs/models.md) | What ships, how names resolve, pinning |
-| [Output formats](docs/output-formats.md) | ALTO structure, provenance, line roles |
+| [Output formats](docs/output-formats.md) | ALTO profiles (NDK), structure, provenance, confidence, line roles |
 | [Troubleshooting](docs/troubleshooting.md) | Install, quality, memory, service errors |
 
 ## Features
 
 - Lightweight: ~12 MB of model artifacts, no GPU required, runs anywhere ONNX Runtime runs.
 - Page OCR for scanned documents, archival material, and newspapers.
-- ALTO XML output with page, block, line, and word coordinates.
+- ALTO XML output with page, block, line, and word coordinates; Czech NDK profile by default (see [limitations](docs/output-formats.md#ndk-profile-remaining-limitations)).
 - CPU and GPU Docker images.
 - FastAPI service with asynchronous job processing.
 - CLI for single-image and batch processing.
@@ -95,7 +95,7 @@ rec-H-v6.int8.onnx
 `rec-H-v6` is a single general handwritten recognizer serving both
 `handwritten` and `kurrent`; it supersedes the earlier Kurrent-only specialist.
 
-The resulting ALTO XML records the layout and recognition models as two `<OCRProcessing>` elements (`IdLayout` / `IdRecognition`, each with an `<ocrProcessingStep>` whose `<processingStepDescription>` is `layout` / `recognition`), so downstream consumers see the explicit provenance pair, e.g. `dec-B-v2` + `rec-E-v5.int8` for default, `dec-B-v1k` + `rec-E-v4k7.int8` for Kramarky, or `dec-B-v2h` + `rec-H-v6.int8` for handwritten and Kurrent.
+The resulting ALTO XML records the layout and recognition models as two `<Processing>` elements (`IdLayout` / `IdRecognition`, each with a `<processingStepDescription>` of `layout` / `recognition` and the model name in `<applicationDescription>`), so downstream consumers see the explicit provenance pair, e.g. `dec-B-v2` + `rec-E-v5.int8` for default, `dec-B-v1k` + `rec-E-v4k7.int8` for Kramarky, or `dec-B-v2h` + `rec-H-v6.int8` for handwritten and Kurrent.
 
 ## Platform support
 
@@ -131,7 +131,7 @@ curl http://localhost:8000/healthz
 
 ## API Usage
 
-Per-request form fields: `image` (file), `domain` (`kramarky`, `handwritten`, `kurrent`, or omitted for printed), `fmt` (`alto`, `txt`, or `multi`), `role_classifier` (bool, optional). With `fmt=multi` the server produces both ALTO XML and plain text from a single OCR pass; choose which to download with the `?which=alto|txt` query parameter on the result endpoint (defaults to `alto`). The server picks model files from its own configuration — clients cannot supply model paths. Submitting more than `TUZKAOCR_MAX_QUEUE` simultaneous jobs returns **503** with a `Retry-After` header.
+Per-request form fields: `image` (file), `domain` (`kramarky`, `handwritten`, `kurrent`, or omitted for printed), `fmt` (`alto`, `txt`, or `multi`), `role_classifier` (bool, optional), `alto_profile` (`ndk` or `basic`, optional), `source_identifier` (string, optional), `physical_img_nr` (int, optional). With `fmt=multi` the server produces both ALTO XML and plain text from a single OCR pass; choose which to download with the `?which=alto|txt` query parameter on the result endpoint (defaults to `alto`). The server picks model files from its own configuration — clients cannot supply model paths. Submitting more than `TUZKAOCR_MAX_QUEUE` simultaneous jobs returns **503** with a `Retry-After` header.
 
 Submit an image for ALTO XML output:
 
@@ -251,7 +251,14 @@ TUZKAOCR_COLUMN_SPLIT=false         # true = order lines column-by-column within
 TUZKAOCR_ADAPTIVE_DOWNSAMPLE=true   # true = recover dense pages via adaptive downsampling
 TUZKAOCR_CPU_MEM_ARENA=true         # false = release RAM to OS between pages (see Memory below)
 TUZKAOCR_ROLE_CLASSIFIER=false      # true = tag each ALTO TextLine with role (body/heading/...)
+TUZKAOCR_ALTO_PROFILE=ndk           # ndk = Czech NDK ingest profile; basic = pre-1.7.2 shape
+TUZKAOCR_ALTO_AGENCY=               # institution for <processingAgency> — omitted if unset; set this
+TUZKAOCR_ALTO_LANG=                 # empty = detect from the text, omit LANG if undetermined
+TUZKAOCR_ALTO_FONTFAMILY=           # empty = omit FONTFAMILY (typefaces are not classified)
+TUZKAOCR_ALTO_DPI=0                 # 0 = read the resolution from the image
+TUZKAOCR_ALTO_PAGE_WIDTH_MM=0       # physical page width; derives the resolution if the image has none
 TUZKAOCR_ROLE_MODEL=role-H5.onnx    # bundled role classifier model
+TUZKAOCR_LANG_MODEL=lang-A-v1.npz   # bundled language detector for ALTO LANG
 TUZKAOCR_RESULTS_DIR=results        # stored API results
 TUZKAOCR_MAX_JOB_AGE_HOURS=24       # result cleanup age (in-memory jobs + disk files)
 TUZKAOCR_MAX_QUEUE=16               # max simultaneous queued+running jobs (503 above this)

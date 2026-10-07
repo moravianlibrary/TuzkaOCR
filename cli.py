@@ -65,8 +65,37 @@ def main() -> None:
                    help="Tag each line with role (body/heading/header/footer/page_number) in ALTO TYPE attr")
     p.set_defaults(role_classifier=False)
 
-    args = p.parse_args()
+    p.add_argument("--alto-profile", choices=["ndk", "basic"], default=None,
+                   help="ALTO flavour: ndk (Czech NDK ingest profile) or basic (legacy)")
+    p.add_argument("--alto-lang", default=None,
+                   help="Language code for ALTO LANG attributes; detected from the text "
+                        "when not given")
+    p.add_argument("--alto-agency", default=None,
+                   help="Institution running the OCR, written as processingAgency; "
+                        "omitted when not set")
+    p.add_argument("--alto-dpi", type=int, default=None,
+                   help="Override the scan resolution used to estimate FONTSIZE; read from "
+                        "the image when not given")
+    p.add_argument("--alto-page-width-mm", type=float, default=None,
+                   help="Physical width of the page in millimetres; the resolution is derived "
+                        "from it when the image itself records none")
+    p.add_argument("--source-identifier", default=None,
+                   help="Identifier of the source image, written as fileIdentifier "
+                        "(single image only)")
+    p.add_argument("--physical-img-nr", type=int, default=None,
+                   help="Sequential page number within the volume; taken from a trailing "
+                        "number in the filename when not given (single image only)")
+    p.add_argument("--ndk-warn", action="store_true",
+                   help="Report NDK profile fields that could not be filled from the input "
+                        "or the configuration")
 
+    args = p.parse_args()
+    if args.physical_img_nr is not None and args.physical_img_nr <= 0:
+        p.error("--physical-img-nr must be a positive integer")
+    if args.batch and (args.physical_img_nr is not None or args.source_identifier is not None):
+        p.error("--physical-img-nr and --source-identifier apply to a single image, not --batch")
+
+    from tuzkaocr.alto import physical_page_number
     from tuzkaocr.config import Config
     _base = Config()
     if args.domain == "kramarky":
@@ -95,7 +124,19 @@ def main() -> None:
         role_classifier = args.role_classifier,
         crop_endpoint_ext = (0.3 if args.domain in ("handwritten", "kurrent") else 0.0),
         column_split = args.domain in ("handwritten", "kurrent"),
+        alto_profile = args.alto_profile or _base.alto_profile,
+        alto_lang = args.alto_lang if args.alto_lang is not None else _base.alto_lang,
+        alto_agency = args.alto_agency if args.alto_agency is not None else _base.alto_agency,
+        alto_dpi = args.alto_dpi if args.alto_dpi is not None else _base.alto_dpi,
+        alto_page_width_mm = (args.alto_page_width_mm if args.alto_page_width_mm is not None
+                              else _base.alto_page_width_mm),
     )
+
+    if (args.ndk_warn and cfg_kwargs["alto_profile"] == "ndk"
+            and not cfg_kwargs["alto_agency"].strip()):
+        print("note: processingAgency is omitted — set TUZKAOCR_ALTO_AGENCY or --alto-agency "
+              "to name the institution running the OCR (the NDK profile requires it)",
+              file=sys.stderr, flush=True)
 
     if not args.batch:
         from tuzkaocr.pipeline import PageProcessor
@@ -111,7 +152,15 @@ def main() -> None:
             out_path = Path(args.out) if args.out else img_path.with_suffix(suffix_map[args.format])
 
         t0 = time.time()
-        result = processor.process_file(img_path, out_path=out_path, fmt=args.format)
+        if (args.ndk_warn and args.physical_img_nr is None
+                and physical_page_number(img_path.name) is None):
+            print(f"note: no page number in {img_path.name!r}; PHYSICAL_IMG_NR falls back to "
+                  "1 — pass --physical-img-nr to record the page's place in the volume",
+                  file=sys.stderr, flush=True)
+
+        result = processor.process_file(img_path, out_path=out_path, fmt=args.format,
+                                        source_identifier=args.source_identifier,
+                                        physical_img_nr=args.physical_img_nr)
         elapsed = time.time() - t0
 
         if args.format == "multi":
@@ -136,6 +185,13 @@ def main() -> None:
         if not images:
             print(f"No images found in {in_dir}", file=sys.stderr)
             sys.exit(1)
+
+        unnumbered = ([p.name for p in images if physical_page_number(p.name) is None]
+                      if args.ndk_warn else [])
+        if unnumbered:
+            print(f"note: {len(unnumbered)} of {len(images)} filenames carry no page number "
+                  f"(e.g. {unnumbered[0]!r}); their PHYSICAL_IMG_NR falls back to 1",
+                  file=sys.stderr, flush=True)
 
         print(f"Processing {len(images)} images with {args.workers} worker(s)...", flush=True)
 

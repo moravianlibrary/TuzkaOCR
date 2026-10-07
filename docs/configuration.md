@@ -99,6 +99,36 @@ This is the server-wide default; the API's `role_classifier` form field and the 
 `--role-classifier` flag override it per request. See
 [Output formats](output-formats.md#line-roles).
 
+## ALTO output
+
+| Variable | Default | Effect |
+|---|---|---|
+| `TUZKAOCR_ALTO_PROFILE` | `ndk` | `ndk` (Czech NDK ingest profile) or `basic` (pre-1.7.2 shape) |
+| `TUZKAOCR_ALTO_AGENCY` | *empty* | Institution running the OCR, written as `processingAgency` |
+| `TUZKAOCR_ALTO_LANG` | *empty* | Language code for `LANG`; empty means detect it from the text |
+| `TUZKAOCR_ALTO_FONTFAMILY` | *empty* | Typeface written as `TextStyle/@FONTFAMILY` |
+| `TUZKAOCR_ALTO_DPI` | `0` | Scan resolution used for `FONTSIZE`; `0` means read it from the image |
+| `TUZKAOCR_ALTO_PAGE_WIDTH_MM` | `0` | Physical page width; the resolution is derived from it when the image records none |
+
+`TUZKAOCR_ALTO_PROFILE` is the server-wide default; the API's `alto_profile` field and the
+CLI's `--alto-profile` override it per request. The other variables affect only the `ndk`
+profile.
+
+Values TuzkaOCR cannot determine are left out of the ALTO rather than guessed. For NDK ingest:
+
+- **Set `TUZKAOCR_ALTO_AGENCY`.** The profile requires `processingAgency`.
+- **Make sure a resolution is available** for `FONTSIZE`. It is read from the image (JPEG, PNG
+  or TIFF metadata), but values below 100 dpi are ignored as software defaults, and derivative
+  JPEGs (such as IIIF images) often record none. Then set either `TUZKAOCR_ALTO_DPI` or
+  `TUZKAOCR_ALTO_PAGE_WIDTH_MM` — e.g. a 4363 px scan of a 450 mm page is 246 dpi.
+  Precedence: `TUZKAOCR_ALTO_DPI` → image metadata → page width.
+- **Set `TUZKAOCR_ALTO_FONTFAMILY`** (`Fraktur`, `Antiqua`, …) if you know it; typefaces are not
+  detected.
+- **Set `TUZKAOCR_ALTO_LANG`** for material the language detector does not cover or pages with
+  very little text — see [Language](output-formats.md#language).
+
+The CLI flag `--ndk-warn` reports missing agency and page numbers during a run.
+
 ## Service limits and storage
 
 | Variable | Default | Effect |
@@ -146,6 +176,7 @@ in [HTTP API](api.md#authentication).
 | `TUZKAOCR_KURRENT_LAYOUT_MODEL` | `dec-B-v2h.onnx` |
 | `TUZKAOCR_KURRENT_OCR_MODEL` | `rec-H-v6.int8.onnx` |
 | `TUZKAOCR_VOCAB` | `vocab.json` |
+| `TUZKAOCR_LANG_MODEL` | `lang-A-v1.npz` |
 
 The defaults are the bundled files and normally need no change. See
 [Models and domains](models.md) for how a name is resolved and when pinning makes sense.

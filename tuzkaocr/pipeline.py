@@ -10,12 +10,13 @@ import numpy as np
 
 from . import _models
 from .config import Config
-from .images import decode_image_path
+from .images import decode_image_path, dpi_from_page_width, read_image_dpi
 from .layout.detector import LayoutDetector
 from .layout import adaptive
+from .lang import LanguageDetector
 from .layout.role import RoleClassifier
 from .ocr.recognizer import OnnxRecognizer
-from .alto import build_alto
+from .alto import HYPHEN_CHARS, build_alto
 
 
 @dataclass
@@ -106,6 +107,16 @@ def _word_bbox(t_start: int, t_end: int, crop_w: int,
     return _bbox_from_quad(x1, 0, x2, _TARGET_H, M_scaled)
 
 
+def _hyphen_split_bboxes(span, crop_w: int, M_scaled: np.ndarray):
+    x0 = span.t_start * _BACKBONE_STRIDE
+    x2 = min((span.t_end + 1) * _BACKBONE_STRIDE, crop_w)
+    xh = min(span.char_ts[-1] * _BACKBONE_STRIDE, crop_w)
+    xh = min(max(xh, x0 + 1), max(x0 + 1, x2 - 1))
+    stem = _bbox_from_quad(x0, 0, xh, _TARGET_H, M_scaled)
+    hyp = _bbox_from_quad(xh, 0, max(xh + 1, x2), _TARGET_H, M_scaled)
+    return stem, hyp
+
+
 def _pitch_calibrate(lines) -> None:
     if len(lines) < 3:
         return
@@ -180,6 +191,7 @@ class PageProcessor:
         self._ocr_model_path = ocr_path
         self._layout_model_path = layout_path
         self._role: Optional[RoleClassifier] = None
+        self._lang: Optional[LanguageDetector] = None
 
     def _layout_pass(self, img_bgr: np.ndarray, downsample: Optional[int]) -> dict:
         regions, img_scale = self.detector.detect(img_bgr, downsample)
@@ -207,35 +219,56 @@ class PageProcessor:
         confs = [c for (t, _, c) in results if t.strip()]
         mean_conf = float(np.mean(confs)) if confs else 0.0
         return {"line_data": line_data, "results": results, "mean_conf": mean_conf,
+                "regions": lp["regions"], "img_scale": img_scale,
                 "pitch": lp["pitch"], "n_lines": lp["n_lines"],
                 "wide": lp["wide"], "lineh": lp["lineh"]}
 
     @staticmethod
-    def _assemble_blocks(line_data: List[_LineInput], results: list) -> List[dict]:
+    def _assemble_blocks(line_data: List[_LineInput], results: list,
+                         regions: Optional[list] = None,
+                         img_scale: float = 1.0) -> List[dict]:
         region_blocks: dict[int, list] = defaultdict(list)
-        for d, (transcription, word_spans, _conf) in zip(line_data, results):
+        for d, (transcription, word_spans, conf) in zip(line_data, results):
             if not transcription.strip():
                 continue
 
             crop_w = d.gray.shape[1]
             lh, lv, lw, lht = _bbox_from_quad(0, 0, crop_w, _TARGET_H, d.M)
 
-            words = [
-                (word, *_word_bbox(t0, t1, crop_w, d.M))
-                for word, t0, t1 in word_spans
-            ]
+            words = []
+            for span in word_spans:
+                wh, wv, ww, wht = _word_bbox(span.t_start, span.t_end, crop_w, d.M)
+                word = {"text": span.text, "hpos": wh, "vpos": wv,
+                        "width": ww, "height": wht}
+                if span.char_conf and len(span.char_conf) == len(span.text):
+                    word["conf"] = float(np.mean(span.char_conf))
+                    word["char_conf"] = list(span.char_conf)
+                if (len(span.text) > 1 and span.text[-1] in HYPHEN_CHARS
+                        and len(span.char_ts) == len(span.text)):
+                    word["stem_box"], word["hyp_box"] = _hyphen_split_bboxes(
+                        span, crop_w, d.M)
+                words.append(word)
 
             region_blocks[d.region_idx].append({
                 "transcription": transcription,
                 "hpos": lh, "vpos": lv, "width": lw, "height": lht,
+                "conf": float(conf),
                 "words": words,
             })
 
-        return [{"lines": region_blocks[ri]} for ri in sorted(region_blocks)]
+        blocks = []
+        for ri in sorted(region_blocks):
+            block = {"lines": region_blocks[ri]}
+            polygon = getattr(regions[ri], "polygon", None) if regions and ri < len(regions) else None
+            if polygon:
+                block["polygon"] = [(int(round(x * img_scale)), int(round(y * img_scale)))
+                                    for x, y in polygon]
+            blocks.append(block)
+        return blocks
 
     def _run(self, img_bgr: np.ndarray,
              height_scale: Optional[float] = None,
-             role_classifier: Optional[bool] = None) -> Tuple[int, int, List[dict], float]:
+             role_classifier: Optional[bool] = None):
         img_h, img_w = img_bgr.shape[:2]
         cfg = self.config
         hs = cfg.height_scale if height_scale is None else height_scale
@@ -261,7 +294,8 @@ class PageProcessor:
                     break
             chosen = _choose_recognized(recognized, base_lp)
 
-        blocks = self._assemble_blocks(chosen["line_data"], chosen["results"])
+        blocks = self._assemble_blocks(chosen["line_data"], chosen["results"],
+                                       chosen.get("regions"), chosen.get("img_scale") or 1.0)
 
         use_role = cfg.role_classifier if role_classifier is None else role_classifier
         if use_role:
@@ -271,37 +305,70 @@ class PageProcessor:
                                             cpu_mem_arena=cfg.cpu_mem_arena)
             self._role.classify_blocks(blocks, img_bgr)
 
-        return img_h, img_w, blocks, float(chosen["mean_conf"])
+        return (img_h, img_w, blocks, float(chosen["mean_conf"]),
+                chosen.get("img_scale"))
+
+    def _detect_language(self, text: str) -> Optional[str]:
+        if self._lang is None:
+            self._lang = LanguageDetector(_models.resolve(self.config.lang_model))
+        return self._lang.detect(text)
 
     def process(self, img_bgr: np.ndarray, page_id: str = "page",
                 fmt: str = "alto", height_scale: Optional[float] = None,
-                role_classifier: Optional[bool] = None, with_meta: bool = False):
-        img_h, img_w, blocks, mean_conf = self._run(img_bgr, height_scale=height_scale,
-                                                    role_classifier=role_classifier)
-        software_name = self._ocr_model_path.stem
-        layout_name = self._layout_model_path.stem
+                role_classifier: Optional[bool] = None, with_meta: bool = False,
+                source_file: Optional[str] = None,
+                source_identifier: Optional[str] = None,
+                profile: Optional[str] = None,
+                dpi: Optional[int] = None,
+                physical_img_nr: Optional[int] = None):
+        img_h, img_w, blocks, mean_conf, img_scale = self._run(
+            img_bgr, height_scale=height_scale, role_classifier=role_classifier)
+        cfg = self.config
+        text = _blocks_to_text(blocks)
+        profile = profile or cfg.alto_profile
+        language = None
+        if fmt != "txt" and profile == "ndk":
+            language = (cfg.alto_lang or "").strip() or self._detect_language(text)
+        alto_kwargs = dict(
+            software_name=self._ocr_model_path.stem,
+            layout_name=self._layout_model_path.stem,
+            profile=profile,
+            source_file=source_file if source_file is not None else page_id,
+            source_identifier=source_identifier,
+            page_confidence=mean_conf,
+            physical_img_nr=physical_img_nr,
+            layout_downsample=img_scale,
+            language=language,
+            dpi=((cfg.alto_dpi or None) or dpi
+                 or dpi_from_page_width(img_w, cfg.alto_page_width_mm)),
+            agency=(cfg.alto_agency or "").strip() or None,
+            font_family=(cfg.alto_fontfamily or "").strip() or None,
+        )
         if fmt == "multi":
             content = {
-                "alto": build_alto(page_id, img_h, img_w, blocks,
-                                   software_name=software_name, layout_name=layout_name),
-                "txt":  _blocks_to_text(blocks),
+                "alto": build_alto(page_id, img_h, img_w, blocks, **alto_kwargs),
+                "txt":  text,
             }
         elif fmt == "txt":
-            content = _blocks_to_text(blocks)
+            content = text
         else:
-            content = build_alto(page_id, img_h, img_w, blocks,
-                                 software_name=software_name, layout_name=layout_name)
+            content = build_alto(page_id, img_h, img_w, blocks, **alto_kwargs)
         if with_meta:
             n_lines = sum(len(b["lines"]) for b in blocks)
             return content, {"mean_conf": round(mean_conf, 4), "n_lines": n_lines}
         return content
 
     def process_file(self, image_path: str | Path, out_path: str | Path | None = None,
-                     fmt: str = "alto"):
+                     fmt: str = "alto", source_identifier: str | None = None,
+                     physical_img_nr: int | None = None):
         img_path = Path(image_path)
         img = decode_image_path(img_path)
 
-        result = self.process(img, page_id=img_path.stem, fmt=fmt)
+        result = self.process(img, page_id=img_path.stem, fmt=fmt,
+                              source_file=img_path.name,
+                              source_identifier=source_identifier,
+                              dpi=read_image_dpi(img_path),
+                              physical_img_nr=physical_img_nr)
 
         if out_path is not None:
             if isinstance(result, dict):

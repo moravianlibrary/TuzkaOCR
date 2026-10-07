@@ -24,6 +24,8 @@ def _env(key: str, default):
     t = type(default)
     if t is bool:
         return val.lower() in ("1", "true", "yes")
+    if t is not str and not val.strip():
+        return default
     return t(val)
 
 
@@ -59,6 +61,15 @@ class Config:
     role_classifier: bool = field(default_factory=lambda: _env("ROLE_CLASSIFIER", False))
     role_model:      str  = field(default_factory=lambda: _env("ROLE_MODEL", "role-H5.onnx"))
 
+    lang_model:      str  = field(default_factory=lambda: _env("LANG_MODEL", "lang-A-v1.npz"))
+
+    alto_profile:    str = field(default_factory=lambda: _env("ALTO_PROFILE",    "ndk"))
+    alto_agency:     str = field(default_factory=lambda: _env("ALTO_AGENCY",     ""))
+    alto_lang:       str = field(default_factory=lambda: _env("ALTO_LANG",       ""))
+    alto_fontfamily: str = field(default_factory=lambda: _env("ALTO_FONTFAMILY", ""))
+    alto_dpi:        int = field(default_factory=lambda: _env("ALTO_DPI",        0))
+    alto_page_width_mm: float = field(default_factory=lambda: _env("ALTO_PAGE_WIDTH_MM", 0.0))
+
     results_dir:        str = field(default_factory=lambda: _env("RESULTS_DIR",        "results"))
     max_job_age_hours:  int = field(default_factory=lambda: _env("MAX_JOB_AGE_HOURS",  24))
 
@@ -72,6 +83,7 @@ class Config:
     spool_dir:          str = field(default_factory=lambda: _env("SPOOL_DIR",          ""))
 
     _ALLOWED_DEVICES = ("cpu", "cuda", "auto")
+    _ALLOWED_ALTO_PROFILES = ("basic", "ndk")
 
     def __post_init__(self) -> None:
         errors: list[str] = []
@@ -94,6 +106,18 @@ class Config:
             errors.append(
                 f"TUZKAOCR_DEVICE must be one of {self._ALLOWED_DEVICES}, got {self.device!r}"
             )
+        _pos_int("alto_dpi", self.alto_dpi, allow_zero=True)
+
+        if self.alto_page_width_mm < 0:
+            errors.append("TUZKAOCR_ALTO_PAGE_WIDTH_MM must be >=0, got "
+                          f"{self.alto_page_width_mm}")
+
+        if self.alto_profile not in self._ALLOWED_ALTO_PROFILES:
+            errors.append(
+                f"TUZKAOCR_ALTO_PROFILE must be one of {self._ALLOWED_ALTO_PROFILES}, "
+                f"got {self.alto_profile!r}"
+            )
+
         if not (0.1 <= self.height_scale <= 10.0):
             errors.append(
                 f"TUZKAOCR_HEIGHT_SCALE must be in [0.1, 10.0], got {self.height_scale}"

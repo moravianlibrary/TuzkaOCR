@@ -52,6 +52,9 @@ Legacy-compatible aliases exist for older clients — see [below](#legacy-endpoi
 | `domain` | string | printed | `default`, `print`, `kramarky`, `handwritten`, `kurrent` |
 | `fmt` | string | `alto` | `alto`, `txt`, `multi` |
 | `role_classifier` | bool | server default | `true` / `false` |
+| `alto_profile` | string | server default (`ndk`) | `ndk`, `basic` |
+| `source_identifier` | string | *none* | Written into the ALTO as `fileIdentifier` |
+| `physical_img_nr` | int | *from the filename* | Sequential page number within the volume; must be >=1 |
 
 ```bash
 curl -F "image=@page.jpg" http://localhost:8000/api/v1/process
@@ -62,7 +65,8 @@ curl -F "image=@page.jpg" http://localhost:8000/api/v1/process
 ```
 
 An empty `domain`, or `default` / `print` / `printed`, all select the printed models. An
-unrecognized `domain` or `fmt` is rejected with **400** before the job is created.
+unrecognized `domain`, `fmt`, or `alto_profile`, or a `physical_img_nr` below 1, is
+rejected with **400** before the job is created.
 
 ## Polling and downloading
 
@@ -118,7 +122,7 @@ Responses carry `text/xml; charset=utf-8` or `text/plain; charset=utf-8` accordi
 |---|---|
 | `200` | Result returned |
 | `202` | Job accepted but still `queued` or `running` |
-| `400` | Unknown `domain`, `fmt`, or `which` |
+| `400` | Unknown `domain`, `fmt`, `alto_profile`, `which`, or an invalid `physical_img_nr` |
 | `401` | Missing or invalid API key, when authentication is enabled |
 | `404` | Unknown job ID, or no result file for it |
 | `413` | Request body exceeds `TUZKAOCR_MAX_UPLOAD_MB` |
