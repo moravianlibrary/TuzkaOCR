@@ -246,7 +246,7 @@ async def list_models(request: Request, caller_name: Optional[str] = Depends(_re
             "layout_model": cfg.kurrent_layout_model,
         },
         "available": {
-            "ocr_models":    [f for f in onnx_files if "rec-" in f],
+            "ocr_models":    [f for f in onnx_files if "rec-" in f and ".style." not in f],
             "layout_models": [f for f in onnx_files if "dec-" in f],
         },
         "selectable_via_domain": ["default"] + sorted(ALLOWED_DOMAINS),

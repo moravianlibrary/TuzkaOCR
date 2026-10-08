@@ -168,13 +168,13 @@ in [HTTP API](api.md#authentication).
 | Variable | Default |
 |---|---|
 | `TUZKAOCR_LAYOUT_MODEL` | `dec-B-v2.onnx` |
-| `TUZKAOCR_OCR_MODEL` | `rec-E-v5.int8.onnx` |
+| `TUZKAOCR_OCR_MODEL` | `rec-E-v5.onnx` |
 | `TUZKAOCR_KRAMARKY_LAYOUT_MODEL` | `dec-B-v1k.onnx` |
-| `TUZKAOCR_KRAMARKY_OCR_MODEL` | `rec-E-v4k7.int8.onnx` |
+| `TUZKAOCR_KRAMARKY_OCR_MODEL` | `rec-E-v4k7.onnx` |
 | `TUZKAOCR_HANDWRITTEN_LAYOUT_MODEL` | `dec-B-v2h.onnx` |
-| `TUZKAOCR_HANDWRITTEN_OCR_MODEL` | `rec-H-v6.int8.onnx` |
+| `TUZKAOCR_HANDWRITTEN_OCR_MODEL` | `rec-I-v2.onnx` |
 | `TUZKAOCR_KURRENT_LAYOUT_MODEL` | `dec-B-v2h.onnx` |
-| `TUZKAOCR_KURRENT_OCR_MODEL` | `rec-H-v6.int8.onnx` |
+| `TUZKAOCR_KURRENT_OCR_MODEL` | `rec-I-v2.onnx` |
 | `TUZKAOCR_VOCAB` | `vocab.json` |
 | `TUZKAOCR_LANG_MODEL` | `lang-A-v1.npz` |
 
@@ -185,7 +185,7 @@ The defaults are the bundled files and normally need no change. See
 
 Peak memory is dominated by the layout detector — a fully convolutional segmentation network
 run at up to about 1536 px. Its fp32 activations are a **transient of roughly 1.3 GiB per
-page in flight**. The model files themselves (3–12 MB) and decoded pages (~10 MB) are
+page in flight**. The model files themselves (0.3–13 MB) and decoded pages (~10 MB) are
 negligible next to that.
 
 ```

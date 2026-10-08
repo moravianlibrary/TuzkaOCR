@@ -15,7 +15,7 @@ from .layout.detector import LayoutDetector
 from .layout import adaptive
 from .lang import LanguageDetector
 from .layout.role import RoleClassifier
-from .ocr.recognizer import OnnxRecognizer
+from .ocr.recognizer import create_recognizer
 from .alto import HYPHEN_CHARS, build_alto
 
 
@@ -180,7 +180,7 @@ class PageProcessor:
             cpu_mem_arena=config.cpu_mem_arena,
             column_split=getattr(config, "column_split", False),
         )
-        self.recognizer = OnnxRecognizer(
+        self.recognizer = create_recognizer(
             str(ocr_path),
             vocab_path=str(vocab_path),
             device=device_str,
@@ -330,8 +330,8 @@ class PageProcessor:
         if fmt != "txt" and profile == "ndk":
             language = (cfg.alto_lang or "").strip() or self._detect_language(text)
         alto_kwargs = dict(
-            software_name=self._ocr_model_path.stem,
-            layout_name=self._layout_model_path.stem,
+            software_name=_models.display_name(self._ocr_model_path),
+            layout_name=_models.display_name(self._layout_model_path),
             profile=profile,
             source_file=source_file if source_file is not None else page_id,
             source_identifier=source_identifier,

@@ -8,11 +8,11 @@ Attribution-NonCommercial-ShareAlike 4.0 International License
 This applies to the model and vocabulary artifacts in this directory,
 including but not limited to:
 
-- dec-A-v4.onnx
-- dec-A-v3k5.onnx
 - dec-B-v2.onnx
-- rec-E-v5.int8.onnx
-- rec-E-v4k7.int8.onnx
+- rec-E-v5.onnx
+- rec-E-v4k7.onnx
+- rec-I-v2.onnx
+- rec-I-v2.style.onnx
 - role-H5.onnx
 - role-G-v1.npz
 - vocab.json

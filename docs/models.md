@@ -1,20 +1,26 @@
 # Models and domains
 
-Layout and recognition are two separate ONNX models, run by ONNX Runtime. A *domain* is a
-matched pair of the two, plus the crop and line-ordering settings that suit that material.
-Clients of the HTTP API choose a domain, never a model file.
+Each domain pairs a layout model with a recognizer, and ONNX Runtime runs the models.
+Handwritten recognition uses both a recognition model and a small style model, so its
+recognizer ships as two ONNX files. A *domain* is the model pair plus the crop and
+line-ordering settings that suit the material. Clients of the HTTP API choose a domain,
+never a model file.
 
 ## Domains
 
 | Domain | Material | Layout | Recognition |
 |---|---|---|---|
-| `default` (also `print`) | Printed books and general scans | `dec-B-v2` | `rec-E-v5.int8` |
-| `kramarky` | Kramarky broadsheet prints | `dec-B-v1k` | `rec-E-v4k7.int8` |
-| `handwritten` | Czech handwriting | `dec-B-v2h` | `rec-H-v6.int8` |
-| `kurrent` | German Kurrent / Sütterlin script | `dec-B-v2h` | `rec-H-v6.int8` |
+| `default` (also `print`) | Printed books and general scans | `dec-B-v2` | `rec-E-v5` |
+| `kramarky` | Kramarky broadsheet prints | `dec-B-v1k` | `rec-E-v4k7` |
+| `handwritten` | Czech handwriting | `dec-B-v2h` | `rec-I-v2` |
+| `kurrent` | German Kurrent / Sütterlin script | `dec-B-v2h` | `rec-I-v2` |
 
-`rec-H-v6` is a single general handwritten recognizer serving both `handwritten` and
-`kurrent`; it supersedes the earlier Kurrent-only specialist.
+`rec-I-v2` is the general handwritten recognizer for both `handwritten` and `kurrent`. It
+adapts to each writer: a small style model reads all lines of the page first, then the
+recognizer reads each line with that page-level style. It ships as
+`rec-I-v2.onnx` and `rec-I-v2.style.onnx`; keep both files together in the same
+directory. TuzkaOCR finds the style file by name and refuses to start without it. A
+single-line page is read without page context.
 
 `handwritten` and `kurrent` also extend line crops at both ends (0.3 of line height) and
 order lines column-by-column within a region, which suits free-flowing script.
@@ -38,18 +44,16 @@ Model files are installed as package data, so nothing is downloaded at first run
 | `dec-B-v2.onnx` | 10.6 MB | Layout, printed |
 | `dec-B-v1k.onnx` | 10.6 MB | Layout, kramarky |
 | `dec-B-v2h.onnx` | 10.6 MB | Layout, handwritten and Kurrent |
-| `dec-A-v4.onnx`, `dec-A-v3k5.onnx` | 3.1 MB each | Earlier layout generation |
-| `rec-E-v5.int8.onnx` | 3.2 MB | Recognition, printed |
-| `rec-E-v4k7.int8.onnx` | 3.2 MB | Recognition, kramarky |
-| `rec-H-v6.int8.onnx` | 12.4 MB | Recognition, handwritten and Kurrent |
-| `rec-H-v4.int8.onnx` | 12.4 MB | Superseded handwritten recognizer |
-| `rec-H-v3h-kurrent.int8.onnx` | 6.5 MB | Superseded Kurrent specialist |
+| `rec-E-v5.onnx` | 3.2 MB | Recognition, printed |
+| `rec-E-v4k7.onnx` | 3.2 MB | Recognition, kramarky |
+| `rec-I-v2.onnx` | 12.6 MB | Recognition, handwritten and Kurrent |
+| `rec-I-v2.style.onnx` | 0.3 MB | Page style, used with `rec-I-v2.onnx` |
+| `rec-H-v6.onnx` | 12.4 MB | Previous handwritten recognizer, kept for pinning |
 | `role-H5.onnx` | 1.1 MB | Line role classifier |
-| `vocab.json` | 888 B | Recognizer character set |
+| `vocab.json` | 1.2 KB | Shared, append-only recognizer vocabulary with 203 characters |
 | `lang-A-v1.npz` | 45 KB | Language identification for ALTO `LANG` |
 
-Recognizers are int8-quantized, which is what keeps a CPU deployment practical. The live
-list of selectable models for a running service is available from
+The live list of selectable models for a running service is available from
 [`GET /api/v1/models`](api.md#listing-models).
 
 ## Language identification
@@ -72,7 +76,7 @@ than failing on the first page.
 
 ```
 Model 'rec-X-v9.onnx' not found on disk and not bundled in tuzkaocr.models
-(bundled: ['dec-A-v3k5.onnx', 'dec-B-v2.onnx', ...])
+(bundled: ['dec-B-v1k.onnx', 'dec-B-v2.onnx', ...])
 ```
 
 This means a bundled file can be selected by bare filename, and a model outside the package
@@ -80,32 +84,32 @@ by absolute or relative path.
 
 ## Pinning a model
 
-Superseded files stay bundled, so pinning an older model keeps working across upgrades. Set
-the relevant variable from [Configuration](configuration.md#models):
+The previous handwritten recognizer stays bundled, so pinning it keeps working across this
+upgrade. Set the relevant variables from [Configuration](configuration.md#models):
 
 ```bash
-TUZKAOCR_KURRENT_OCR_MODEL=rec-H-v3h-kurrent.int8.onnx
+TUZKAOCR_HANDWRITTEN_OCR_MODEL=rec-H-v6.onnx
+TUZKAOCR_KURRENT_OCR_MODEL=rec-H-v6.onnx
 ```
 
-That restores the pre-`rec-H-v6` Kurrent specialist for the `kurrent` domain, leaving
-`handwritten` on the current model.
+That restores the previous handwritten model for both domains.
 
 On the CLI the equivalent is per-invocation, and can replace one half of a pair:
 
 ```bash
-tuzkaocr page.jpg --domain kurrent --ocr-model rec-H-v3h-kurrent.int8.onnx
+tuzkaocr page.jpg --domain kurrent --ocr-model rec-H-v6.onnx
 ```
 
-!!! danger "`vocab.json` is shared"
-    One vocabulary serves every recognizer and must match the model in use. Override
-    `TUZKAOCR_VOCAB` only alongside a custom recognizer that needs it — a mismatch produces
-    confident nonsense rather than an error.
+!!! warning "`vocab.json` is shared"
+    The vocabulary is an append-only superset that decodes every bundled recognizer. A
+    custom vocabulary must still match the model in use; `rec-I-v2` requires all 203
+    characters. Override `TUZKAOCR_VOCAB` only alongside a custom recognizer that needs it.
 
 ## Provenance in the output
 
 Every ALTO file records which pair produced it, as two `Processing` elements — one for
 layout, one for recognition, each naming the model in `applicationDescription` — so a
-downstream consumer can tell a `rec-E-v5` page from a `rec-H-v6` one years later without
+downstream consumer can tell a `rec-E-v5` page from a `rec-I-v2` one years later without
 external bookkeeping. The legacy `basic` profile writes the same information as two
 deprecated `OCRProcessing` elements instead. See
 [Output formats](output-formats.md#model-provenance).

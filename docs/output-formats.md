@@ -131,14 +131,14 @@ name:
     <softwareCreator>tuzkaocr</softwareCreator>
     <softwareName>TuzkaOCR</softwareName>
     <softwareVersion>1.7.2</softwareVersion>
-    <applicationDescription>recognition model rec-E-v5.int8</applicationDescription>
+    <applicationDescription>recognition model rec-E-v5</applicationDescription>
   </processingSoftware>
 </Processing>
 ```
 
 Use `processingStepDescription` to tell the stages apart. The model pair identifies the domain:
-`dec-B-v2` + `rec-E-v5.int8` is printed, `dec-B-v1k` + `rec-E-v4k7.int8` is kramarky,
-`dec-B-v2h` + `rec-H-v6.int8` is handwritten or Kurrent.
+`dec-B-v2` + `rec-E-v5` is printed, `dec-B-v1k` + `rec-E-v4k7` is kramarky,
+`dec-B-v2h` + `rec-I-v2` is handwritten or Kurrent.
 
 `processingAgency` is written only when `TUZKAOCR_ALTO_AGENCY` (or `--alto-agency`) is set.
 NDK ingest requires it.

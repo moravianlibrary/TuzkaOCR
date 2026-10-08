@@ -5,7 +5,7 @@ It detects page layout and text lines, runs line-level recognition, maps recogni
 back to source-image coordinates, and returns either ALTO XML with word bounding boxes or
 plain text.
 
-Around 12 MB of model artifacts per domain, no GPU required, and it runs anywhere ONNX
+Around 13 MB of model artifacts per domain, no GPU required, and it runs anywhere ONNX
 Runtime runs.
 
 ## What it does
@@ -24,7 +24,8 @@ Runtime runs.
 1. Load the image with OpenCV.
 2. Detect regions, baselines, and line heights with the layout model.
 3. Extract perspective-corrected line crops.
-4. Recognize each line with the ONNX recognizer.
+4. For handwritten and Kurrent pages, read all line styles first, then recognize each line
+   with the page-level style. Other domains recognize each line directly.
 5. Assemble ALTO XML or plain text.
 
 ## Quickstart

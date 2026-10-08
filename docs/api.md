@@ -215,18 +215,20 @@ curl -s http://localhost:8000/api/v1/models
 
 ```json
 {
-  "defaults":    {"ocr_model": "rec-E-v5.int8.onnx",  "layout_model": "dec-B-v2.onnx", "height_scale": 1.0},
-  "kramarky":    {"ocr_model": "rec-E-v4k7.int8.onnx", "layout_model": "dec-B-v1k.onnx"},
-  "handwritten": {"ocr_model": "rec-H-v6.int8.onnx",  "layout_model": "dec-B-v2h.onnx"},
-  "kurrent":     {"ocr_model": "rec-H-v6.int8.onnx",  "layout_model": "dec-B-v2h.onnx"},
+  "defaults":    {"ocr_model": "rec-E-v5.onnx",  "layout_model": "dec-B-v2.onnx", "height_scale": 1.0},
+  "kramarky":    {"ocr_model": "rec-E-v4k7.onnx", "layout_model": "dec-B-v1k.onnx"},
+  "handwritten": {"ocr_model": "rec-I-v2.onnx",  "layout_model": "dec-B-v2h.onnx"},
+  "kurrent":     {"ocr_model": "rec-I-v2.onnx",  "layout_model": "dec-B-v2h.onnx"},
   "available":   {"ocr_models": ["..."], "layout_models": ["..."]},
   "selectable_via_domain": ["default", "handwritten", "kramarky", "kurrent"]
 }
 ```
 
-`available` lists every `.onnx` bundled in the package, including superseded files. Only
-`selectable_via_domain` values are accepted as a `domain`; pinning a different bundled file
-is a server-side setting, described in [Models and domains](models.md#pinning-a-model).
+`available` lists bundled layout and recognition models, including superseded files. The
+handwritten style file is not listed as a recognizer because it is loaded automatically with
+`rec-I-v2`. Only `selectable_via_domain` values are accepted as a `domain`; pinning a
+different bundled file is a server-side setting, described in
+[Models and domains](models.md#pinning-a-model).
 
 ## A complete client
 

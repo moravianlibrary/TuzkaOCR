@@ -21,7 +21,7 @@ Full documentation is in [`docs/`](docs/), published at
 
 ## Features
 
-- Lightweight: ~12 MB of model artifacts, no GPU required, runs anywhere ONNX Runtime runs.
+- Lightweight: ~13 MB of model artifacts per domain, no GPU required, runs anywhere ONNX Runtime runs.
 - Page OCR for scanned documents, archival material, and newspapers.
 - ALTO XML output with page, block, line, and word coordinates; Czech NDK profile by default (see [limitations](docs/output-formats.md#ndk-profile-remaining-limitations)).
 - CPU and GPU Docker images.
@@ -67,7 +67,7 @@ Default models:
 
 ```text
 dec-B-v2.onnx
-rec-E-v5.int8.onnx
+rec-E-v5.onnx
 vocab.json
 ```
 
@@ -75,27 +75,40 @@ Kramarky models:
 
 ```text
 dec-B-v1k.onnx
-rec-E-v4k7.int8.onnx
+rec-E-v4k7.onnx
 ```
 
 Handwritten models (`domain=handwritten`, Czech handwriting):
 
 ```text
 dec-B-v2h.onnx
-rec-H-v6.int8.onnx
+rec-I-v2.onnx
+rec-I-v2.style.onnx
 ```
 
 Kurrent models (`domain=kurrent`, German Kurrent/Sütterlin script):
 
 ```text
 dec-B-v2h.onnx
-rec-H-v6.int8.onnx
+rec-I-v2.onnx
+rec-I-v2.style.onnx
 ```
 
-`rec-H-v6` is a single general handwritten recognizer serving both
-`handwritten` and `kurrent`; it supersedes the earlier Kurrent-only specialist.
+`rec-I-v2` is the general handwritten recognizer for both `handwritten` and `kurrent`. A
+small style model reads all page lines first; the recognizer then reads each line with that
+page-level style. Keep `rec-I-v2.onnx` and `rec-I-v2.style.onnx` together in the
+same directory; TuzkaOCR locates the style file by name and refuses to start without it.
+A single-line page is read without page context. The shared `vocab.json` is an append-only
+203-character superset for all bundled recognizers; custom vocabularies must match the
+model in use, and v8 needs all 203 characters.
 
-The resulting ALTO XML records the layout and recognition models as two `<Processing>` elements (`IdLayout` / `IdRecognition`, each with a `<processingStepDescription>` of `layout` / `recognition` and the model name in `<applicationDescription>`), so downstream consumers see the explicit provenance pair, e.g. `dec-B-v2` + `rec-E-v5.int8` for default, `dec-B-v1k` + `rec-E-v4k7.int8` for Kramarky, or `dec-B-v2h` + `rec-H-v6.int8` for handwritten and Kurrent.
+For handwritten and Kurrent pages, the style file is used internally and the ALTO provenance
+records `rec-I-v2` as the recognition model. The resulting ALTO XML records the layout
+and recognition models as two `<Processing>` elements (`IdLayout` / `IdRecognition`, each
+with a `<processingStepDescription>` of `layout` / `recognition` and the model name in
+`<applicationDescription>`), so downstream consumers see the explicit provenance pair, e.g.
+`dec-B-v2` + `rec-E-v5` for default, `dec-B-v1k` + `rec-E-v4k7` for Kramarky, or
+`dec-B-v2h` + `rec-I-v2` for handwritten and Kurrent.
 
 ## Platform support
 
@@ -277,23 +290,23 @@ changes:
 
 ```text
 TUZKAOCR_LAYOUT_MODEL=dec-B-v2.onnx                 # printed (default domain)
-TUZKAOCR_OCR_MODEL=rec-E-v5.int8.onnx
+TUZKAOCR_OCR_MODEL=rec-E-v5.onnx
 TUZKAOCR_KRAMARKY_LAYOUT_MODEL=dec-B-v1k.onnx       # domain=kramarky
-TUZKAOCR_KRAMARKY_OCR_MODEL=rec-E-v4k7.int8.onnx
+TUZKAOCR_KRAMARKY_OCR_MODEL=rec-E-v4k7.onnx
 TUZKAOCR_HANDWRITTEN_LAYOUT_MODEL=dec-B-v2h.onnx    # domain=handwritten
-TUZKAOCR_HANDWRITTEN_OCR_MODEL=rec-H-v6.int8.onnx
+TUZKAOCR_HANDWRITTEN_OCR_MODEL=rec-I-v2.onnx
 TUZKAOCR_KURRENT_LAYOUT_MODEL=dec-B-v2h.onnx        # domain=kurrent
-TUZKAOCR_KURRENT_OCR_MODEL=rec-H-v6.int8.onnx
-TUZKAOCR_VOCAB=vocab.json                           # shared recognizer character set
+TUZKAOCR_KURRENT_OCR_MODEL=rec-I-v2.onnx
+TUZKAOCR_VOCAB=vocab.json
 ```
 
 A value that names an existing file is used as given (`~` is expanded); otherwise its
 filename is looked up in the bundled `tuzkaocr/models/` directory. An unresolvable name
-fails at startup with a message listing what is bundled. Superseded model files stay
-bundled, so a pin to an older model keeps working after an upgrade — for example
-`TUZKAOCR_KURRENT_OCR_MODEL=rec-H-v3h-kurrent.int8.onnx` restores the pre-`rec-H-v6`
-Kurrent specialist. `TUZKAOCR_VOCAB` is shared by every recognizer and must match the
-models in use; override it only alongside a custom recognizer.
+fails at startup with a message listing what is bundled. The previous handwritten
+recognizer stays bundled, so pinning both `TUZKAOCR_HANDWRITTEN_OCR_MODEL=rec-H-v6.onnx`
+and `TUZKAOCR_KURRENT_OCR_MODEL=rec-H-v6.onnx` restores it. `TUZKAOCR_VOCAB` is
+shared by every recognizer and must match the models in use; override it only alongside a
+custom recognizer.
 
 ## Adaptive downsampling
 

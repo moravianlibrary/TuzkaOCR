@@ -142,7 +142,8 @@ None of these are needed for ordinary OCR; unknown values are left out of the AL
 | `--vocab` | `vocab.json` | Override the recognizer character set |
 
 `--layout-model` and `--ocr-model` override individual slots of the chosen `--domain`, so
-you can swap one half of a pair. `--vocab` must match the recognizer in use.
+you can swap one half of a pair. When `--ocr-model` selects a page-style recognizer, its
+`.style` sibling is found automatically. `--vocab` must match the recognizer in use.
 
 ### Performance
 
