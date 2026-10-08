@@ -163,14 +163,16 @@ back to CPU otherwise. The plain `onnxruntime` wheel is CPU-only, so `auto` reso
 | Option | Default | Effect |
 |---|---|---|
 | `--height-scale` | `1.0` | Multiply predicted line heights; try `1.5` if crops clip ascenders |
-| `--no-adaptive` | *adaptive on* | Force a single fixed-resolution layout pass |
+| `--no-adaptive` | *adaptive on* | Force a single fixed-resolution layout pass (always the case for `handwritten`, `kurrent` and `kramarky`) |
 | `--role-classifier` | off | Tag each line with a structural role in the ALTO output |
 
 **Adaptive downsampling** is on by default. Each page is first processed at the standard
 downsample; if it looks resolution-starved — overlapping baselines, or low recognition
 confidence — it is reprocessed at a finer downsample and the result with the highest
 confidence wins. Dense multi-column pages that escalate cost roughly 2–3× the per-page
-time. `--no-adaptive` disables the second pass.
+time. `--no-adaptive` disables the second pass. The `handwritten`, `kurrent` and `kramarky`
+domains always use a single pass: escalation fragments handwritten lines, and on Kramarky it
+costs about 2× the time for little gain.
 
 **Role classification** tags every line as `body`, `heading`, `header`, `footer`, or
 `page_number`, surfaced in ALTO as a `StructureTag`. It costs a few milliseconds per page

@@ -34,8 +34,9 @@
 
     1. **Check the domain.** The wrong model pair costs more accuracy than every other
        setting combined. See [Models and domains](models.md).
-    2. **Leave adaptive downsampling on** for dense multi-column pages — do not pass
-       `--no-adaptive`.
+    2. **Leave adaptive downsampling on** for dense multi-column printed pages — do not
+       pass `--no-adaptive`. It applies to the printed domain only; `handwritten`,
+       `kurrent` and `kramarky` always use a single pass.
     3. **Try `--height-scale 1.5`** if crops appear to clip ascenders or descenders.
     4. **Check the scan.** Below roughly 200 dpi, no setting recovers the page.
 

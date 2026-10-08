@@ -111,6 +111,7 @@ class ProcessorCache:
                     layout_model=getattr(self._base_cfg, layout_field),
                     crop_endpoint_ext=ext,
                     column_split=colsplit,
+                    adaptive_downsample=False,
                 )
                 self._by_domain[domain] = PageProcessor(cfg)
             return self._by_domain[domain]

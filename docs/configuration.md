@@ -66,7 +66,7 @@ down.
 |---|---|---|
 | `TUZKAOCR_HEIGHT_SCALE` | `1.0` | Multiplies predicted line heights (valid range 0.1–10.0) |
 | `TUZKAOCR_MAX_WIDTH` | `3400` | Maximum line-crop width fed to the recognizer, in pixels |
-| `TUZKAOCR_ADAPTIVE_DOWNSAMPLE` | `true` | Re-run resolution-starved pages at a finer downsample |
+| `TUZKAOCR_ADAPTIVE_DOWNSAMPLE` | `true` | Re-run resolution-starved printed pages at a finer downsample (never for `handwritten`, `kurrent` or `kramarky`) |
 | `TUZKAOCR_CROP_ENDPOINT_EXT` | `0.0` | Extend line crops at both ends, as a fraction of line height |
 | `TUZKAOCR_COLUMN_SPLIT` | `false` | Order lines column-by-column within a region |
 
@@ -87,6 +87,12 @@ reprocessed finer and the highest-confidence result wins.
 Pages that escalate cost roughly 2–3× the per-page time. It cannot be switched off per
 request; set `TUZKAOCR_ADAPTIVE_DOWNSAMPLE=false` server-side, or pass `--no-adaptive` on
 the CLI.
+
+The `handwritten`, `kurrent` and `kramarky` domains never escalate, whatever this setting
+says. On handwriting the finer passes split faint pencil and grid-paper lines into
+fragments, so a single pass at the standard downsample is both more accurate and about 3×
+faster in layout. On Kramarky broadsheets a single pass is about 2× faster for a small
+accuracy cost (roughly +0.3 percentage points CER on the benchmark set).
 
 ## Line roles
 

@@ -320,6 +320,8 @@ TUZKAOCR_ADAPTIVE_DOWNSAMPLE=true   # default; set false for fixed single-pass l
 
 The CLI exposes `--no-adaptive` to force the fixed single-pass path.
 
+The `handwritten`, `kurrent` and `kramarky` domains never escalate and always use a single pass at the standard downsample: on handwriting the finer passes split faint and grid-paper lines into fragments, and on Kramarky broadsheets escalation costs about 2× the time for a small gain.
+
 ## Line role classification (experimental)
 
 Off by default. When enabled, every recognized line is tagged with one of `body`, `heading` (title / section heading), `header` (running page header), `footer` (running page footer), or `page_number`. Each role surfaces as an ALTO `<StructureTag>` (in `<Tags>`) referenced from the relevant `<TextLine>` via `TAGREFS`.

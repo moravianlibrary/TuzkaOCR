@@ -120,7 +120,7 @@ def main() -> None:
         line_workers  = args.line_workers,
         page_workers  = args.workers,
         height_scale  = args.height_scale,
-        adaptive_downsample = args.adaptive,
+        adaptive_downsample = args.adaptive and args.domain in ("default", "print"),
         role_classifier = args.role_classifier,
         crop_endpoint_ext = (0.3 if args.domain in ("handwritten", "kurrent") else 0.0),
         column_split = args.domain in ("handwritten", "kurrent"),
