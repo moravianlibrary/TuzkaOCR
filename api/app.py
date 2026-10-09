@@ -11,6 +11,7 @@ from fastapi import FastAPI
 from starlette.responses import PlainTextResponse
 from starlette.types import ASGIApp, Receive, Scope, Send
 
+from tuzkaocr import __version__
 from tuzkaocr.config import Config
 from tuzkaocr.pipeline import PageProcessor
 from tuzkaocr.jobs import JobStore
@@ -212,7 +213,7 @@ def create_app(config: Config | None = None) -> FastAPI:
     app = FastAPI(
         title="tuzkaocr",
         description="OCR pipeline for scanned page and document images — ALTO XML or text output",
-        version="1.7.1",
+        version=__version__,
         lifespan=lifespan,
     )
 

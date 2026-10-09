@@ -130,7 +130,7 @@ name:
   <processingSoftware>
     <softwareCreator>tuzkaocr</softwareCreator>
     <softwareName>TuzkaOCR</softwareName>
-    <softwareVersion>1.7.2</softwareVersion>
+    <softwareVersion>1.8.0</softwareVersion>
     <applicationDescription>recognition model rec-E-v5</applicationDescription>
   </processingSoftware>
 </Processing>
