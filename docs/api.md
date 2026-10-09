@@ -50,7 +50,7 @@ Legacy-compatible aliases exist for older clients — see [below](#legacy-endpoi
 |---|---|---|---|
 | `image` | file | *required* | JPEG, PNG, or TIFF |
 | `domain` | string | printed | `default`, `print`, `kramarky`, `handwritten`, `kurrent` |
-| `fmt` | string | `alto` | `alto`, `txt`, `multi` |
+| `fmt` | string | `alto` | `alto`, `page`, `txt`, `multi` |
 | `role_classifier` | bool | server default | `true` / `false` |
 | `alto_profile` | string | server default (`ndk`) | `ndk`, `basic` |
 | `source_identifier` | string | *none* | Written into the ALTO as `fileIdentifier` |

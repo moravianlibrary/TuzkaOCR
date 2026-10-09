@@ -35,8 +35,9 @@ def main() -> None:
     p.add_argument("input", help="Image file or directory (with --batch)")
     p.add_argument("--out",      default=None,    help="Output file path (single image)")
     p.add_argument("--out-dir",  default="results", help="Output directory (batch mode)")
-    p.add_argument("--format",   choices=["alto", "txt", "multi"], default="alto",
-                   help="Output format: alto (ALTO XML), txt (plain text), or multi (both)")
+    p.add_argument("--format",   choices=["alto", "page", "txt", "multi"], default="alto",
+                   help="Output format: alto (ALTO XML), page (PAGE XML), txt (plain text), "
+                        "or multi (ALTO and text)")
     p.add_argument("--batch",    action="store_true", help="Process all images in a directory")
     p.add_argument("--workers",  type=int, default=2, help="Parallel page workers (batch)")
 
@@ -145,7 +146,7 @@ def main() -> None:
         processor = PageProcessor(cfg)
 
         img_path = Path(args.input)
-        suffix_map = {"alto": ".alto.xml", "txt": ".txt", "multi": ""}
+        suffix_map = {"alto": ".alto.xml", "page": ".page.xml", "txt": ".txt", "multi": ""}
         if args.format == "multi":
             out_path = Path(args.out) if args.out else img_path.with_suffix("")
         else:
@@ -168,6 +169,9 @@ def main() -> None:
             n_strings = result["alto"].count("<String ")
             print(f"Done in {elapsed:.1f}s — {n_strings} words, {n_lines} lines → "
                   f"{out_path}.alto.xml, {out_path}.txt", flush=True)
+        elif args.format == "page":
+            n_words = result.count("<Word ")
+            print(f"Done in {elapsed:.1f}s — {n_words} words → {out_path}", flush=True)
         elif args.format == "txt":
             n_lines = result.count("\n")
             print(f"Done in {elapsed:.1f}s — {n_lines} lines → {out_path}", flush=True)
@@ -195,7 +199,7 @@ def main() -> None:
 
         print(f"Processing {len(images)} images with {args.workers} worker(s)...", flush=True)
 
-        suffix_map = {"alto": ".alto.xml", "txt": ".txt", "multi": ""}
+        suffix_map = {"alto": ".alto.xml", "page": ".page.xml", "txt": ".txt", "multi": ""}
         suffix = suffix_map[args.format]
         tasks = [
             (str(img), str(out_dir / (img.stem + suffix)), args.format)

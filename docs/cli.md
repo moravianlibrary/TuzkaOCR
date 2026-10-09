@@ -35,7 +35,17 @@ installing, use `python cli.py` in place of `tuzkaocr` in every example below.
     Done in 2.3s — 37 lines → result.txt
     ```
 
-=== "Both at once"
+=== "PAGE XML"
+
+    ```bash
+    tuzkaocr page.jpg --format page --out result.page.xml
+    ```
+
+    ```
+    Done in 1.4s — 412 words → result.page.xml
+    ```
+
+=== "ALTO and text at once"
 
     ```bash
     tuzkaocr page.jpg --format multi --out page
@@ -49,7 +59,8 @@ installing, use `python cli.py` in place of `tuzkaocr` in every example below.
     appended. Both outputs come from a single OCR pass.
 
 When `--out` is omitted, the output is written next to the input image with the suffix
-replaced: `page.jpg` becomes `page.alto.xml`, `page.txt`, or both.
+replaced: `page.jpg` becomes `page.alto.xml`, `page.page.xml`, `page.txt`, or ALTO and text with
+`multi`.
 
 ## Choosing a domain
 
@@ -106,7 +117,7 @@ continues. The command exits non-zero only when the input directory contains no 
 |---|---|---|
 | `--out` | *derived from input* | Output file for a single image; a stem when `--format multi` |
 | `--out-dir` | `results` | Output directory in batch mode |
-| `--format` | `alto` | `alto`, `txt`, or `multi` |
+| `--format` | `alto` | `alto`, `page` (PAGE XML), `txt`, or `multi` (ALTO and text) |
 | `--batch` | off | Treat the input as a directory of images |
 
 ### ALTO output
@@ -176,7 +187,7 @@ costs about 2× the time for little gain.
 
 **Role classification** tags every line as `body`, `heading`, `header`, `footer`, or
 `page_number`, surfaced in ALTO as a `StructureTag`. It costs a few milliseconds per page
-and only affects `alto` and `multi` output. It prefers silence over wrong markup: when the
+and only affects `alto`, `page` and `multi` output. It prefers silence over wrong markup: when the
 classifier is not confident, the line stays `body`, so mistakes appear as a missing tag
 rather than an incorrect one. See [Output formats](output-formats.md#line-roles).
 

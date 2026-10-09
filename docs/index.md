@@ -2,7 +2,7 @@
 
 Lightweight OCR pipeline for scanned page and document images, optimized for CPU inference.
 It detects page layout and text lines, runs line-level recognition, maps recognized words
-back to source-image coordinates, and returns either ALTO XML with word bounding boxes or
+back to source-image coordinates, and returns ALTO XML or PAGE XML with word bounding boxes, or
 plain text.
 
 Around 13 MB of model artifacts per domain, no GPU required, and it runs anywhere ONNX
@@ -15,6 +15,7 @@ Runtime runs.
   Kurrent/Sütterlin.
 - ALTO XML output with page, block, line, and word coordinates, plus explicit model
   provenance.
+- PAGE XML output with line baselines and polygons, for Transkribus, eScriptorium and OCR-D.
 - A command-line tool for single pages and batch directories.
 - A FastAPI service with asynchronous job processing, and CPU and GPU container images.
 - Optional API-key authentication, single-key or per-caller.
@@ -26,7 +27,7 @@ Runtime runs.
 3. Extract perspective-corrected line crops.
 4. For handwritten and Kurrent pages, read all line styles first, then recognize each line
    with the page-level style. Other domains recognize each line directly.
-5. Assemble ALTO XML or plain text.
+5. Assemble ALTO XML, PAGE XML or plain text.
 
 ## Quickstart
 

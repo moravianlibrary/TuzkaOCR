@@ -17,6 +17,7 @@ from .lang import LanguageDetector
 from .layout.role import RoleClassifier
 from .ocr.recognizer import create_recognizer
 from .alto import HYPHEN_CHARS, build_alto
+from .pagexml import build_page_xml
 
 
 @dataclass
@@ -24,6 +25,7 @@ class _LineInput:
     gray: np.ndarray
     M: np.ndarray
     region_idx: int
+    baseline: Optional[list] = None
 
 _TARGET_H      = 40
 _BACKBONE_STRIDE = 2
@@ -212,7 +214,9 @@ class PageProcessor:
                                         endpoint_ext=self.config.crop_endpoint_ext)
                 if gray is None:
                     continue
-                line_data.append(_LineInput(gray=gray, M=M, region_idx=ri))
+                line_data.append(_LineInput(
+                    gray=gray, M=M, region_idx=ri,
+                    baseline=[(x * img_scale, y * img_scale) for x, y in line.baseline]))
         results = (self.recognizer.run_lines([d.gray for d in line_data],
                                              workers=self.config.line_workers)
                    if line_data else [])
@@ -234,6 +238,9 @@ class PageProcessor:
 
             crop_w = d.gray.shape[1]
             lh, lv, lw, lht = _bbox_from_quad(0, 0, crop_w, _TARGET_H, d.M)
+            quad = cv2.perspectiveTransform(
+                np.array([[0, 0], [crop_w, 0], [crop_w, _TARGET_H], [0, _TARGET_H]],
+                         dtype=np.float64).reshape(-1, 1, 2), d.M).reshape(-1, 2)
 
             words = []
             for span in word_spans:
@@ -254,6 +261,8 @@ class PageProcessor:
                 "hpos": lh, "vpos": lv, "width": lw, "height": lht,
                 "conf": float(conf),
                 "words": words,
+                "polygon": [(float(x), float(y)) for x, y in quad],
+                "baseline": d.baseline,
             })
 
         blocks = []
@@ -327,7 +336,7 @@ class PageProcessor:
         text = _blocks_to_text(blocks)
         profile = profile or cfg.alto_profile
         language = None
-        if fmt != "txt" and profile == "ndk":
+        if fmt == "page" or (fmt != "txt" and profile == "ndk"):
             language = (cfg.alto_lang or "").strip() or self._detect_language(text)
         alto_kwargs = dict(
             software_name=_models.display_name(self._ocr_model_path),
@@ -344,6 +353,12 @@ class PageProcessor:
             agency=(cfg.alto_agency or "").strip() or None,
             font_family=(cfg.alto_fontfamily or "").strip() or None,
         )
+        page_kwargs = dict(
+            software_name=alto_kwargs["software_name"],
+            layout_name=alto_kwargs["layout_name"],
+            source_file=alto_kwargs["source_file"],
+            language=language,
+        )
         if fmt == "multi":
             content = {
                 "alto": build_alto(page_id, img_h, img_w, blocks, **alto_kwargs),
@@ -351,6 +366,8 @@ class PageProcessor:
             }
         elif fmt == "txt":
             content = text
+        elif fmt == "page":
+            content = build_page_xml(page_id, img_h, img_w, blocks, **page_kwargs)
         else:
             content = build_alto(page_id, img_h, img_w, blocks, **alto_kwargs)
         if with_meta:

@@ -1,5 +1,5 @@
 site_name: TuzkaOCR
-site_description: OCR pipeline for scanned page and document images — ALTO XML or text output
+site_description: OCR pipeline for scanned page and document images — ALTO XML, PAGE XML or text output
 site_url: https://moravianlibrary.github.io/TuzkaOCR/
 site_author: Moravian Library
 

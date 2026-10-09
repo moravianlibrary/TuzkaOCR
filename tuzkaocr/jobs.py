@@ -162,7 +162,7 @@ class JobStore:
             if job and job.result_paths:
                 if target_ext:
                     for p in job.result_paths:
-                        if p.suffix == target_ext and p.exists():
+                        if p.name == f"{job_id}{target_ext}" and p.exists():
                             return p
                 else:
                     for p in job.result_paths:
@@ -171,7 +171,7 @@ class JobStore:
         if target_ext:
             p = self._results_dir / f"{job_id}{target_ext}"
             return p if p.exists() else None
-        for ext in (".xml", ".txt"):
+        for ext in (".xml", ".page.xml", ".txt"):
             p = self._results_dir / f"{job_id}{ext}"
             if p.exists():
                 return p

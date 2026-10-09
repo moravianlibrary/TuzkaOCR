@@ -1,7 +1,7 @@
 # Output formats
 
-Three formats, chosen with `--format` on the CLI or the `fmt` field on the API: `alto`,
-`txt`, and `multi`.
+Four formats, chosen with `--format` on the CLI or the `fmt` field on the API: `alto`,
+`page`, `txt`, and `multi`.
 
 ## Plain text
 
@@ -14,7 +14,8 @@ o velike vode v Brne
 leta Pane 1893
 ```
 
-Best for full-text indexing and search. Use ALTO if you need to link text back to the image.
+Best for full-text indexing and search. Use ALTO or PAGE if you need to link text back to the
+image.
 
 A word broken across a line end keeps its hyphen and line break here; ALTO also records the
 rejoined word — see [Hyphenation](#hyphenation).
@@ -241,8 +242,9 @@ Two things to expect when parsing:
 In the `ndk` profile roles additionally drive [margin placement](#print-space-and-margins).
 
 Enable it per request with `--role-classifier` (CLI) or `role_classifier=true` (API), or
-server-wide with `TUZKAOCR_ROLE_CLASSIFIER=true`. Roles affect only `alto` and `multi`
-output — plain text has nowhere to put them.
+server-wide with `TUZKAOCR_ROLE_CLASSIFIER=true`. Roles affect only `alto`, `page` and
+`multi` output — plain text has nowhere to put them. For PAGE see
+[Roles and region types](#roles-and-region-types).
 
 ### NDK profile: remaining limitations
 
@@ -261,10 +263,69 @@ These are written only when configured or detectable: `processingAgency`, `FONTF
 `FONTSIZE` (needs a resolution), `LANG` and `PHYSICAL_IMG_NR` — see
 [Configuration](configuration.md#alto-output).
 
+## PAGE XML
+
+[PAGE](https://github.com/PRImA-Research-Lab/PAGE-XML) in the 2019-07-15 schema, the format
+read by Transkribus, eScriptorium, Kraken and OCR-D tools. All coordinates are in **pixels**
+of the source image and every point is clipped to the page. The output validates against
+the official `pagecontent.xsd`.
+
+Unlike ALTO, PAGE keeps the detected line geometry: each `TextLine` carries its baseline and
+the oriented quadrilateral it was read from, so skewed and curved lines survive a round trip
+into a correction tool. The `--alto-*` options and `alto_profile` have no effect on it.
+
+### Structure
+
+```
+PcGts
+├── Metadata
+│   ├── Creator                        TuzkaOCR <version>
+│   ├── Created / LastChange
+│   ├── MetadataItem type="processingStep" name="layout"       value=<layout model>
+│   └── MetadataItem type="processingStep" name="recognition"  value=<recognition model>
+└── Page imageFilename imageWidth imageHeight [primaryLanguage]
+    ├── ReadingOrder → OrderedGroup → RegionRefIndexed index regionRef
+    └── TextRegion id="r0001" type custom="readingOrder {index:0;}"
+        ├── Coords points                  the detected region outline
+        ├── TextLine id="r0001_l0001" custom="readingOrder {index:0;}"
+        │   ├── Coords points              the line quadrilateral
+        │   ├── Baseline points            the detected baseline
+        │   ├── Word id="r0001_l0001_w0001"
+        │   │   ├── Coords points          the word rectangle
+        │   │   └── TextEquiv conf → Unicode
+        │   └── TextEquiv conf → Unicode   the line text
+        └── TextEquiv → Unicode            the region's lines joined by newlines
+```
+
+Regions appear in reading order, which `ReadingOrder` also states explicitly. Lines with no
+recognized text are dropped, and a region left with no lines is omitted.
+
+`conf` is the recognizer's confidence, 0 = uncertain … 1 = certain — the same values as ALTO
+`WC`. The line confidence is the one averaged into `mean_conf`. PAGE has no per-character
+confidence and no hyphenation markup: a word broken across a line end stays as two words with
+the hyphen, as in plain text.
+
+`primaryLanguage` comes from the same detector as ALTO `LANG` — see [Language](#language) —
+written as the PAGE language name (`Czech`, `German`, `English`, `Slovak`, `Polish`,
+`Latin`). `TUZKAOCR_ALTO_LANG` overrides it too.
+
+### Roles and region types
+
+With [role classification](#line-roles) enabled, a region's `type` is the dominant role of
+its lines — `heading`, `header`, `footer`, or `page-number` — and `paragraph` otherwise.
+Each non-body line also carries it in the Transkribus-style `custom` attribute:
+
+```xml
+<TextLine id="r0001_l0001" custom="readingOrder {index:0;} structure {type:heading;}">
+```
+
+Without roles every region is `paragraph`.
+
 ## Both at once
 
 `multi` produces ALTO and text from a **single OCR pass**, so it costs the same as either one
-alone. Use it whenever you want both; running the page twice is pure waste.
+alone. Use it whenever you want both; running the page twice is pure waste. PAGE XML is not
+part of `multi`; request it with `page`.
 
 On the CLI, `--out` becomes a stem and both suffixes are appended:
 

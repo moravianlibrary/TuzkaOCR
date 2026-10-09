@@ -1,6 +1,6 @@
 # TuzkaOCR
 
-Lightweight OCR pipeline for scanned page and document images, optimized for CPU inference. The system detects page layout and text lines, runs line-level OCR, maps recognized words back to source-image coordinates, and returns either ALTO XML with word bounding boxes or plain text.
+Lightweight OCR pipeline for scanned page and document images, optimized for CPU inference. The system detects page layout and text lines, runs line-level OCR, maps recognized words back to source-image coordinates, and returns ALTO XML or PAGE XML with word bounding boxes, or plain text.
 
 ## Documentation
 
@@ -16,7 +16,7 @@ Full documentation is in [`docs/`](docs/), published at
 | [Docker](docs/docker.md) | Compose services, storage, ownership, operations |
 | [Configuration](docs/configuration.md) | Every `TUZKAOCR_*` variable, memory sizing |
 | [Models and domains](docs/models.md) | What ships, how names resolve, pinning |
-| [Output formats](docs/output-formats.md) | ALTO profiles (NDK), structure, provenance, confidence, line roles |
+| [Output formats](docs/output-formats.md) | ALTO profiles (NDK), PAGE XML, structure, provenance, confidence, line roles |
 | [Troubleshooting](docs/troubleshooting.md) | Install, quality, memory, service errors |
 
 ## Features
@@ -24,6 +24,7 @@ Full documentation is in [`docs/`](docs/), published at
 - Lightweight: ~13 MB of model artifacts per domain, no GPU required, runs anywhere ONNX Runtime runs.
 - Page OCR for scanned documents, archival material, and newspapers.
 - ALTO XML output with page, block, line, and word coordinates; Czech NDK profile by default (see [limitations](docs/output-formats.md#ndk-profile-remaining-limitations)).
+- PAGE XML output (2019-07-15 schema) with line baselines and polygons.
 - CPU and GPU Docker images.
 - FastAPI service with asynchronous job processing.
 - CLI for single-image and batch processing.
@@ -36,7 +37,7 @@ Full documentation is in [`docs/`](docs/), published at
 2. Detect regions, baselines, and line heights using the layout model.
 3. Extract perspective-corrected line crops.
 4. Run OCR recognition with ONNX Runtime.
-5. Build structured output as ALTO XML or plain text.
+5. Build structured output as ALTO XML, PAGE XML or plain text.
 6. Store API job results under `results/`.
 
 ## Repository Layout
@@ -144,7 +145,7 @@ curl http://localhost:8000/healthz
 
 ## API Usage
 
-Per-request form fields: `image` (file), `domain` (`kramarky`, `handwritten`, `kurrent`, or omitted for printed), `fmt` (`alto`, `txt`, or `multi`), `role_classifier` (bool, optional), `alto_profile` (`ndk` or `basic`, optional), `source_identifier` (string, optional), `physical_img_nr` (int, optional). With `fmt=multi` the server produces both ALTO XML and plain text from a single OCR pass; choose which to download with the `?which=alto|txt` query parameter on the result endpoint (defaults to `alto`). The server picks model files from its own configuration — clients cannot supply model paths. Submitting more than `TUZKAOCR_MAX_QUEUE` simultaneous jobs returns **503** with a `Retry-After` header.
+Per-request form fields: `image` (file), `domain` (`kramarky`, `handwritten`, `kurrent`, or omitted for printed), `fmt` (`alto`, `page`, `txt`, or `multi`), `role_classifier` (bool, optional), `alto_profile` (`ndk` or `basic`, optional), `source_identifier` (string, optional), `physical_img_nr` (int, optional). With `fmt=multi` the server produces both ALTO XML and plain text from a single OCR pass; choose which to download with the `?which=alto|txt` query parameter on the result endpoint (defaults to `alto`). The server picks model files from its own configuration — clients cannot supply model paths. Submitting more than `TUZKAOCR_MAX_QUEUE` simultaneous jobs returns **503** with a `Retry-After` header.
 
 Submit an image for ALTO XML output:
 
@@ -213,6 +214,12 @@ Single image to plain text:
 
 ```bash
 python cli.py page.jpg --format txt --out result.txt
+```
+
+Single image to PAGE XML (line baselines and polygons, for Transkribus / eScriptorium / OCR-D):
+
+```bash
+python cli.py page.jpg --format page --out result.page.xml
 ```
 
 Single image to both ALTO XML and plain text in one pass (`--out` is a stem; suffixes are appended):

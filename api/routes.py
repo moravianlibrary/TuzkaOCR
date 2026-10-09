@@ -16,7 +16,7 @@ from tuzkaocr.images import ImageDecodeError, decode_image_path, read_image_dpi
 from tuzkaocr.jobs import JobInputError, JobStoreFull
 
 ALLOWED_DOMAINS = {"kramarky", "handwritten", "kurrent"}
-ALLOWED_FMTS = {"alto", "txt", "multi"}
+ALLOWED_FMTS = {"alto", "page", "txt", "multi"}
 ALLOWED_ALTO_PROFILES = {"ndk", "basic"}
 ALLOWED_WHICH = {"alto", "txt"}
 SPOOL_PREFIX = "tuzkaocr-upload-"
@@ -207,7 +207,7 @@ def _submit(request: Request, spool_path: Path, page_id: str,
                                  dpi=read_image_dpi(spool_path),
                                  physical_img_nr=physical_img_nr)
 
-    result_ext = ".txt" if fmt == "txt" else ".xml"
+    result_ext = {"txt": ".txt", "page": ".page.xml"}.get(fmt, ".xml")
     try:
         return store.submit(
             work,
