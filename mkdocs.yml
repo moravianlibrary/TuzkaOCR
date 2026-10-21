@@ -54,6 +54,7 @@ nav:
   - Reference:
       - Configuration: configuration.md
       - Models and domains: models.md
+      - Custom domain packs: custom-domains.md
       - Output formats: output-formats.md
   - Troubleshooting: troubleshooting.md
 

@@ -11,6 +11,7 @@ import numpy as np
 
 from . import _models
 from .config import Config
+from .domains import combined_version
 from .images import decode_gray_image_path, decode_image_path, dpi_from_page_width, read_image_dpi
 from .layout.detector import LayoutDetector
 from .layout.large_text import stretch_crop
@@ -584,12 +585,17 @@ class PageProcessor:
                  or dpi_from_page_width(img_w, cfg.alto_page_width_mm)),
             agency=(cfg.alto_agency or "").strip() or None,
             font_family=(cfg.alto_fontfamily or "").strip() or None,
+            software_version=combined_version(cfg.domain_name, cfg.domain_version),
+            domain_description=(f"domain {cfg.domain_name} {cfg.domain_version}"
+                                if cfg.domain_name and cfg.domain_version else None),
         )
         page_kwargs = dict(
             software_name=alto_kwargs["software_name"],
             layout_name=alto_kwargs["layout_name"],
             source_file=alto_kwargs["source_file"],
             language=language,
+            software_version=alto_kwargs["software_version"],
+            domain_description=alto_kwargs["domain_description"],
         )
         if fmt == "multi":
             content = {

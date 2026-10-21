@@ -21,3 +21,5 @@ docker-compose.yml
 # Secrets / local config
 api_keys.yaml
 api_keys.example.yaml
+domains/*
+!domains/README.md

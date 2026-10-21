@@ -21,8 +21,9 @@ COPY LICENSE NOTICE ./
 
 RUN groupadd --system --gid 10001 app \
     && useradd --system --uid 10001 --gid app --home-dir /app --shell /usr/sbin/nologin app \
-    && mkdir -p /app/results /app/input /app/spool \
+    && mkdir -p /app/results /app/input /app/spool /app/domains \
     && chown -R app:app /app \
+    && chown 1000:1000 /app/domains \
     && chmod 0777 /app/spool
 
 VOLUME ["/app/results", "/app/spool"]
@@ -30,7 +31,9 @@ VOLUME ["/app/results", "/app/spool"]
 EXPOSE 8000
 
 ENV TUZKAOCR_RESULTS_DIR=/app/results \
-    TUZKAOCR_SPOOL_DIR=/app/spool
+    TUZKAOCR_SPOOL_DIR=/app/spool \
+    TUZKAOCR_DOMAINS_DIR=/app/domains \
+    TUZKAOCR_PACK_CACHE=/tmp/tuzkaocr-packs
 
 USER app
 

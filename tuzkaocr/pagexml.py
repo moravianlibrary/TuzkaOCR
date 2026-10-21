@@ -82,7 +82,9 @@ def build_page_xml(page_id: str, img_h: int, img_w: int, blocks: list,
                    layout_name: str | None = None,
                    *,
                    source_file: str | None = None,
-                   language: str | None = None) -> str:
+                   language: str | None = None,
+                   software_version: str = __version__,
+                   domain_description: str | None = None) -> str:
     img_h = int(img_h)
     img_w = int(img_w)
     if img_w < 1 or img_h < 1:
@@ -96,12 +98,14 @@ def build_page_xml(page_id: str, img_h: int, img_w: int, blocks: list,
 
     timestamp = datetime.now(timezone.utc).replace(microsecond=0).isoformat()
     metadata = ET.SubElement(root, "Metadata")
-    ET.SubElement(metadata, "Creator").text = f"TuzkaOCR {__version__}"
+    ET.SubElement(metadata, "Creator").text = f"TuzkaOCR {software_version}"
     ET.SubElement(metadata, "Created").text = timestamp
     ET.SubElement(metadata, "LastChange").text = timestamp
     if layout_name:
         _metadata_item(metadata, "layout", layout_name)
     _metadata_item(metadata, "recognition", software_name)
+    if domain_description:
+        _metadata_item(metadata, "domain", domain_description)
 
     page_attrs = {
         "imageFilename": _xml_safe(source_file or page_id),

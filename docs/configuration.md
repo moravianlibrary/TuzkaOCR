@@ -199,6 +199,19 @@ in [HTTP API](api.md#authentication).
 The defaults are the bundled files and normally need no change. See
 [Models and domains](models.md) for how a name is resolved and when pinning makes sense.
 
+## Custom domain packs
+
+| Variable | Default | Effect |
+|---|---|---|
+| `TUZKAOCR_DOMAINS_DIR` | `$XDG_DATA_HOME/tuzkaocr/domains`, or `~/.local/share/tuzkaocr/domains` | Folder scanned for `.tpack` files and pack folders; Docker uses `/app/domains` |
+| `TUZKAOCR_PACK_CACHE` | system temporary directory plus `tuzkaocr-packs/` | Writable cache for safely extracted `.tpack` files; Docker uses `/tmp/tuzkaocr-packs` |
+| `TUZKAOCR_DEFAULT_DOMAIN` | The pack marked `default`, or built-in `print` | Select a loaded pack or built-in domain as the default; set to `print` to bypass a pack default |
+
+Setting `TUZKAOCR_DOMAINS_DIR` to an empty string disables pack discovery. Pack settings are
+overridden by explicitly set `TUZKAOCR_*` environment values, then by CLI flags or API form
+fields where available. See [Custom domain packs](custom-domains.md) for installation and
+validation.
+
 ## Memory
 
 Peak memory is dominated by the layout model, about **1.3 GiB per page in flight**:

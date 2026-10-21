@@ -28,6 +28,8 @@ results/*
 spool/*
 !spool/.gitkeep
 input/
+domains/*
+!domains/README.md
 
 # Editor/OS noise
 .DS_Store

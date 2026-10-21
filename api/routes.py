@@ -12,6 +12,8 @@ from fastapi.responses import PlainTextResponse
 from fastapi.security.api_key import APIKeyHeader
 
 from tuzkaocr import _models
+from tuzkaocr import __version__
+from tuzkaocr.domains import build_domain_config
 from tuzkaocr.images import (
     ImageDecodeError,
     decode_gray_image_path,
@@ -20,7 +22,6 @@ from tuzkaocr.images import (
 )
 from tuzkaocr.jobs import JobInputError, JobStoreFull
 
-ALLOWED_DOMAINS = {"kramarky", "handwritten", "kurrent"}
 ALLOWED_FMTS = {"alto", "page", "txt", "multi"}
 ALLOWED_ALTO_PROFILES = {"ndk", "basic"}
 ALLOWED_WHICH = {"alto", "txt"}
@@ -31,8 +32,9 @@ _api_key_header = APIKeyHeader(name="X-API-Key", auto_error=False)
 
 
 @router.get("/healthz")
-async def healthz():
-    return {"status": "ok"}
+async def healthz(request: Request):
+    domains = getattr(request.app.state, "domains", None)
+    return {"status": "ok", "version": __version__, "custom": bool(domains and domains.custom)}
 
 
 class _KeyStore:
@@ -85,13 +87,16 @@ def _require_key(request: Request, key: Optional[str] = Security(_api_key_header
     return None
 
 
-def _validate_domain(domain: Optional[str]) -> Optional[str]:
-    if domain in (None, "", "default", "print", "printed"):
+def _validate_domain(request: Request, domain: Optional[str]) -> Optional[str]:
+    if domain in (None, "", "default"):
         return None
-    if domain not in ALLOWED_DOMAINS:
+    if domain in ("print", "printed"):
+        return "print"
+    domains = request.app.state.domains
+    if domain not in domains.domains:
         raise HTTPException(
-            status_code=400,
-            detail=f"Unknown domain '{domain}'. Allowed: {['default'] + sorted(ALLOWED_DOMAINS)}",
+            status_code=422,
+            detail=f"Unknown domain '{domain}'. Allowed: {domains.names()}",
         )
     return domain
 
@@ -220,7 +225,7 @@ def _submit(request: Request, spool_path: Path, page_id: str,
             orientation: Optional[str] = None,
             orientation_threshold: Optional[float] = None,
             contrast: Optional[str] = None) -> str:
-    domain = _validate_domain(domain)
+    domain = _validate_domain(request, domain)
     fmt = _validate_fmt(fmt)
     alto_profile = _validate_alto_profile(alto_profile)
     physical_img_nr = _validate_physical_img_nr(physical_img_nr)
@@ -275,42 +280,61 @@ def _submit(request: Request, spool_path: Path, page_id: str,
 @router.get("/api/v1/models")
 async def list_models(request: Request, caller_name: Optional[str] = Depends(_require_key)):
     cfg = request.app.state.config
+    registry = request.app.state.domains
+    default_cfg = build_domain_config(
+        cfg, registry.default_domain,
+    )
+    builtin = registry.builtins
     models_dir = _models.bundled_dir()
     onnx_files = sorted(p.name for p in models_dir.glob("*.onnx") if p.is_file())
-    return {
+    result = {
+        "version": __version__,
+        "domains": registry.version_payload()["domains"],
         "defaults": {
-            "ocr_model":    cfg.ocr_model,
-            "layout_model": cfg.layout_model,
-            "height_scale": cfg.height_scale,
-            "orientation": cfg.orientation,
-            "orientation_model": cfg.orientation_model,
-            "orientation_threshold": cfg.orientation_threshold,
-            "orientation_probe": cfg.orientation_probe,
-            "orientation_recheck": cfg.orientation_recheck,
-            "orientation_recheck_conf": cfg.orientation_recheck_conf,
-            "orientation_recheck_chars": cfg.orientation_recheck_chars,
-            "contrast": cfg.contrast,
-            "contrast_ink": cfg.contrast_ink,
+            "ocr_model":    Path(default_cfg.ocr_model).name,
+            "layout_model": Path(default_cfg.layout_model).name,
+            "height_scale": default_cfg.height_scale,
+            "orientation": default_cfg.orientation,
+            "orientation_model": default_cfg.orientation_model,
+            "orientation_threshold": default_cfg.orientation_threshold,
+            "orientation_probe": default_cfg.orientation_probe,
+            "orientation_recheck": default_cfg.orientation_recheck,
+            "orientation_recheck_conf": default_cfg.orientation_recheck_conf,
+            "orientation_recheck_chars": default_cfg.orientation_recheck_chars,
+            "contrast": default_cfg.contrast,
+            "contrast_ink": default_cfg.contrast_ink,
         },
         "kramarky": {
-            "ocr_model":    cfg.kramarky_ocr_model,
-            "layout_model": cfg.kramarky_layout_model,
+            "ocr_model":    Path(builtin["kramarky"].ocr_model).name,
+            "layout_model": Path(builtin["kramarky"].layout_model).name,
         },
         "handwritten": {
-            "ocr_model":    cfg.handwritten_ocr_model,
-            "layout_model": cfg.handwritten_layout_model,
+            "ocr_model":    Path(builtin["handwritten"].ocr_model).name,
+            "layout_model": Path(builtin["handwritten"].layout_model).name,
         },
         "kurrent": {
-            "ocr_model":    cfg.kurrent_ocr_model,
-            "layout_model": cfg.kurrent_layout_model,
+            "ocr_model":    Path(builtin["kurrent"].ocr_model).name,
+            "layout_model": Path(builtin["kurrent"].layout_model).name,
         },
         "available": {
             "ocr_models":    [f for f in onnx_files if "rec-" in f and ".style." not in f],
             "layout_models": [f for f in onnx_files if "dec-" in f],
             "orientation_models": [f for f in onnx_files if f.startswith("orient-")],
         },
-        "selectable_via_domain": ["default"] + sorted(ALLOWED_DOMAINS),
+        "selectable_via_domain": registry.names(),
     }
+    for name, domain in registry.domains.items():
+        if domain.pack:
+            result[name] = {
+                "ocr_model": Path(domain.ocr_model).name,
+                "layout_model": Path(domain.layout_model).name,
+            }
+    return result
+
+
+@router.get("/api/v1/version")
+async def version_info(request: Request, caller_name: Optional[str] = Depends(_require_key)):
+    return request.app.state.domains.version_payload()
 
 
 def _reject_if_full(request: Request) -> None:

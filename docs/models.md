@@ -55,7 +55,8 @@ Model files are installed as package data, so nothing is downloaded at first run
 ## How a model name is resolved
 
 A value that names an existing file is used as given; otherwise its filename is looked up in
-the bundled `tuzkaocr/models/`. An unresolvable name fails at startup.
+the bundled `tuzkaocr/models/`. Custom pack model paths resolve inside the pack. An
+unresolvable name fails at startup.
 
 ## Pinning a model
 
@@ -63,8 +64,13 @@ To use a different model for a domain, set its [model variable](configuration.md
 on the server, for example `TUZKAOCR_HANDWRITTEN_OCR_MODEL=/models/my-recognizer.onnx`, or
 pass `--layout-model` / `--ocr-model` on the CLI.
 
-`vocab.json` is shared by every bundled recognizer; override `TUZKAOCR_VOCAB` only alongside
-a custom recognizer.
+`vocab.json` is shared by the bundled recognizers. A custom recognizer always comes with its
+own matching vocabulary; if the model expects more output classes than the vocabulary covers,
+startup reports the class-count mismatch instead of failing later during decoding. When using
+`--ocr-model` directly, pass its matching `--vocab` as well.
+
+To distribute your own model as a single file, use a [custom domain pack](custom-domains.md). It keeps
+the recognizer, vocabulary, checksums, and domain settings together.
 
 Every ALTO file names the layout and recognition models that produced it — see
 [Output formats](output-formats.md#model-provenance).

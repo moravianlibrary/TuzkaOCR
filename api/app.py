@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import dataclasses
 import tempfile
 import threading
 from contextlib import asynccontextmanager
@@ -13,6 +12,7 @@ from starlette.types import ASGIApp, Receive, Scope, Send
 
 from tuzkaocr import __version__
 from tuzkaocr.config import Config
+from tuzkaocr.domains import DomainRegistry, build_domain_config
 from tuzkaocr.pipeline import PageProcessor
 from tuzkaocr.jobs import JobStore
 
@@ -88,36 +88,28 @@ class BodySizeLimitMiddleware:
 
 
 class ProcessorCache:
-    DOMAIN_MODELS = {
-        "kramarky":    ("kramarky_layout_model", "kramarky_ocr_model", 0.0, False),
-        "handwritten": ("handwritten_layout_model", "handwritten_ocr_model", 0.3, True),
-        "kurrent":     ("kurrent_layout_model", "kurrent_ocr_model", 0.3, True),
-    }
-
-    def __init__(self, default: PageProcessor, base_cfg: Config):
-        self._default = default
+    def __init__(self, base_cfg: Config, domains: DomainRegistry):
         self._base_cfg = base_cfg
+        self._domains = domains
         self._by_domain: dict[str, PageProcessor] = {}
         self._lock = threading.Lock()
+        self._default = self._create(domains.default_domain)
+
+    def _create(self, domain) -> PageProcessor:
+        cfg = build_domain_config(
+            self._base_cfg,
+            domain,
+        )
+        return PageProcessor(cfg)
 
     def get(self, domain: Optional[str] = None) -> PageProcessor:
-        if domain not in self.DOMAIN_MODELS:
+        selected = self._domains.resolve(domain)
+        if selected.name == self._domains.default_name:
             return self._default
         with self._lock:
-            if domain not in self._by_domain:
-                layout_field, ocr_field, ext, colsplit = self.DOMAIN_MODELS[domain]
-                cfg = dataclasses.replace(
-                    self._base_cfg,
-                    ocr_model=getattr(self._base_cfg, ocr_field),
-                    layout_model=getattr(self._base_cfg, layout_field),
-                    crop_endpoint_ext=ext,
-                    column_split=colsplit,
-                    adaptive_downsample=False,
-                    reading_order="basic",
-                    large_text=False,
-                )
-                self._by_domain[domain] = PageProcessor(cfg)
-            return self._by_domain[domain]
+            if selected.name not in self._by_domain:
+                self._by_domain[selected.name] = self._create(selected)
+            return self._by_domain[selected.name]
 
 
 def _validate_auth(cfg: Config) -> None:
@@ -188,8 +180,8 @@ def create_app(config: Config | None = None) -> FastAPI:
         if swept_spool:
             print(f"[cleanup] removed {swept_spool} orphaned upload spool file(s) on startup", flush=True)
         print("Loading models...", flush=True)
-        default_processor = PageProcessor(cfg)
-        cache = ProcessorCache(default_processor, cfg)
+        domains = DomainRegistry(cfg)
+        cache = ProcessorCache(cfg, domains)
         store = JobStore(
             cfg.results_path(),
             max_workers=cfg.page_workers,
@@ -199,6 +191,7 @@ def create_app(config: Config | None = None) -> FastAPI:
         app.state.cache = cache
         app.state.store = store
         app.state.config = cfg
+        app.state.domains = domains
         _schedule_cleanup()
         print("Ready.", flush=True)
         yield

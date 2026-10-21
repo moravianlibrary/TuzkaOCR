@@ -5,16 +5,23 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 
-def _load_dotenv() -> None:
+def _load_dotenv() -> dict[str, str]:
     try:
         from dotenv import load_dotenv
     except ImportError:
-        return
+        return {}
     load_dotenv(Path(".env"), override=False)
+    before = dict(os.environ)
     load_dotenv(Path(__file__).parent.parent / "tuzkaocr.env", override=False)
+    return {key: value for key, value in os.environ.items() if key not in before}
 
 
-_load_dotenv()
+_SHIPPED_ENV = _load_dotenv()
+
+
+def env_is_explicit(name: str) -> bool:
+    value = os.environ.get(name)
+    return value is not None and _SHIPPED_ENV.get(name) != value
 
 
 def _env(key: str, default):
@@ -94,6 +101,9 @@ class Config:
     api_key:            str = field(default_factory=lambda: _env("API_KEY",            ""))
 
     spool_dir:          str = field(default_factory=lambda: _env("SPOOL_DIR",          ""))
+
+    domain_name:        str = ""
+    domain_version:     str = ""
 
     _ALLOWED_DEVICES = ("cpu", "cuda", "auto")
     _ALLOWED_ALTO_PROFILES = ("basic", "ndk")

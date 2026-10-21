@@ -97,3 +97,33 @@
 
 ??? failure "GPU is not being used"
     The pinned `onnxruntime` is CPU-only. Use the [GPU image](docker.md#gpu-service).
+
+## Custom domain packs
+
+??? failure "A pack is missing from `--list-domains`"
+    Check that the `.tpack` or pack folder is directly inside `TUZKAOCR_DOMAINS_DIR`.
+    Non-default packs with invalid manifests, checksums, or version requirements are skipped
+    with a warning. Run `python cli.py --check-domains` for the full validation report.
+
+??? failure "`sha256 mismatch for <file>`"
+    The file differs from the checksum in `domain.json`. Re-copy the complete pack from its
+    provider rather than editing one model file in place.
+
+??? failure "`unknown setting key '<key>'` or an invalid setting value"
+    Remove the unsupported setting or correct its value, then ask the pack provider to rebuild
+    the archive. Pack settings use the same ranges as the corresponding `TUZKAOCR_*` setting.
+
+??? failure "`requires_tuzkaocr` is unsupported or does not match this version"
+    Use a pack built for the installed core version, or install a compatible TuzkaOCR release.
+
+??? failure "`unsafe zip member` or a `.tpack` size-limit error"
+    The archive contains a path outside its root, nested folders, or more than the allowed
+    uncompressed size. Ask the provider for a corrected archive.
+
+??? failure "`model ... expects N classes, vocab ... covers M`"
+    The recognizer and vocabulary do not match. Pass the vocabulary shipped with that model;
+    every custom recognizer needs its matching vocabulary.
+
+??? failure "Unknown domain in the CLI or API"
+    Run `python cli.py --list-domains` or query `/api/v1/models`; use a listed built-in or pack
+    name. An explicit `print` selection bypasses a pack default.

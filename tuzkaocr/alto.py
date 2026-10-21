@@ -527,7 +527,7 @@ def _emit_illustration(parent, block: dict, ctx: dict) -> None:
 
 
 def _emit_pre_operation(parent, timestamp: str, agency: str | None,
-                        downsample: float) -> None:
+                        downsample: float, software_version: str) -> None:
     step = ET.SubElement(parent, "Processing", {"ID": "IdPreOperation"})
     ET.SubElement(step, "processingCategory").text = "preOperation"
     ET.SubElement(step, "processingDateTime").text = timestamp
@@ -540,11 +540,12 @@ def _emit_pre_operation(parent, timestamp: str, agency: str | None,
     software = ET.SubElement(step, "processingSoftware")
     ET.SubElement(software, "softwareCreator").text = "tuzkaocr"
     ET.SubElement(software, "softwareName").text = "TuzkaOCR"
-    ET.SubElement(software, "softwareVersion").text = __version__
+    ET.SubElement(software, "softwareVersion").text = software_version
 
 
 def _emit_processing(parent, step_id: str, description: str, model_name: str,
-                     timestamp: str, agency: str | None) -> None:
+                     timestamp: str, agency: str | None,
+                     software_version: str, domain_description: str | None) -> None:
     step = ET.SubElement(parent, "Processing", {"ID": step_id})
     ET.SubElement(step, "processingCategory").text = "contentGeneration"
     ET.SubElement(step, "processingDateTime").text = timestamp
@@ -554,9 +555,11 @@ def _emit_processing(parent, step_id: str, description: str, model_name: str,
     software = ET.SubElement(step, "processingSoftware")
     ET.SubElement(software, "softwareCreator").text = "tuzkaocr"
     ET.SubElement(software, "softwareName").text = "TuzkaOCR"
-    ET.SubElement(software, "softwareVersion").text = __version__
-    ET.SubElement(software, "applicationDescription").text = (
-        f"{description} model {_xml_safe(model_name)}")
+    ET.SubElement(software, "softwareVersion").text = software_version
+    application_description = f"{description} model {_xml_safe(model_name)}"
+    if domain_description:
+        application_description += f" {_xml_safe(domain_description)}"
+    ET.SubElement(software, "applicationDescription").text = application_description
 
 
 def _emit_ocr_processing(parent, step_id: str, description: str, model_name: str,
@@ -583,7 +586,9 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
                language: str | None = None,
                dpi: int | None = None,
                agency: str | None = None,
-               font_family: str | None = None) -> str:
+               font_family: str | None = None,
+               software_version: str = __version__,
+               domain_description: str | None = None) -> str:
     if profile not in PROFILES:
         raise ValueError(f"ALTO profile must be one of {PROFILES}, got {profile!r}")
     if (physical_img_nr is not None
@@ -623,11 +628,12 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
 
     if ndk:
         if layout_downsample and abs(float(layout_downsample) - 1.0) > 1e-6:
-            _emit_pre_operation(desc, timestamp, agency, float(layout_downsample))
+            _emit_pre_operation(desc, timestamp, agency, float(layout_downsample), software_version)
         if layout_name:
-            _emit_processing(desc, "IdLayout", "layout", layout_name, timestamp, agency)
+            _emit_processing(desc, "IdLayout", "layout", layout_name, timestamp, agency,
+                             software_version, domain_description)
         _emit_processing(desc, "IdRecognition", "recognition", software_name,
-                         timestamp, agency)
+                         timestamp, agency, software_version, domain_description)
     else:
         if layout_name:
             _emit_ocr_processing(desc, "IdLayout", "layout", layout_name, timestamp)

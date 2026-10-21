@@ -39,7 +39,8 @@ key per caller, see [HTTP API](api.md#authentication).
 ## CPU service with Compose
 
 From a clone of the repository, Compose adds the results directory, the spool volume,
-`tuzkaocr.env` and the health check:
+`domains/` directory, `tuzkaocr.env` and the health check. Put `.tpack` files in `domains/`
+before starting the service:
 
 ```bash
 docker compose pull cpu
@@ -49,6 +50,11 @@ docker compose up -d cpu
 `TUZKAOCR_VERSION=1.9.0` selects the image version (default `latest`), and
 `TUZKAOCR_CPU_PORT` the host port (default 8000). To build the image from your checkout
 instead, use `docker compose up --build -d cpu`.
+
+Compose mounts `./domains` read-only at `/app/domains` and sets
+`TUZKAOCR_DOMAINS_DIR=/app/domains`. Zip packs are extracted into the writable
+`/tmp/tuzkaocr-packs` cache. See [Custom domain packs](custom-domains.md) for installation and
+building an image with a pack built in.
 
 
 ## GPU service
@@ -78,6 +84,8 @@ has no effect. Everything else in [Configuration](configuration.md) applies.
 |---|---|---|
 | `/app/results` | bind mount `./results` | Finished OCR output, swept by age |
 | `/app/spool` | named volume (`cpu_spool` / `gpu_spool`) | Uploads in flight |
+| `/app/domains` | read-only bind mount `./domains` | Custom `.tpack` files |
+| `/tmp/tuzkaocr-packs` | container temporary storage | Extracted pack cache |
 
 Keep `./results` on persistent storage. Each service has its own spool volume; do not share
 one between services.

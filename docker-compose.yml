@@ -9,11 +9,14 @@ services:
     environment:
       TUZKAOCR_RESULTS_DIR: /app/results
       TUZKAOCR_SPOOL_DIR: /app/spool
+      TUZKAOCR_DOMAINS_DIR: /app/domains
+      TUZKAOCR_PACK_CACHE: /tmp/tuzkaocr-packs
     user: "${TUZKAOCR_RUN_UID:-1000}:${TUZKAOCR_RUN_GID:-1000}"
     ports:
       - "${TUZKAOCR_CPU_PORT:-8000}:8000"
     volumes:
       - ./results:/app/results
+      - ./domains:/app/domains:ro
       - cpu_spool:/app/spool
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()"]
@@ -37,11 +40,14 @@ services:
       TUZKAOCR_DEVICE: cuda
       TUZKAOCR_RESULTS_DIR: /app/results
       TUZKAOCR_SPOOL_DIR: /app/spool
+      TUZKAOCR_DOMAINS_DIR: /app/domains
+      TUZKAOCR_PACK_CACHE: /tmp/tuzkaocr-packs
     user: "${TUZKAOCR_RUN_UID:-1000}:${TUZKAOCR_RUN_GID:-1000}"
     ports:
       - "${TUZKAOCR_GPU_PORT:-8001}:8000"
     volumes:
       - ./results:/app/results
+      - ./domains:/app/domains:ro
       - gpu_spool:/app/spool
     healthcheck:
       test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/healthz', timeout=5).read()"]

@@ -130,7 +130,11 @@ name:
 ```
 
 `processingAgency` is written only when `TUZKAOCR_ALTO_AGENCY` is set. The `basic` profile
-writes two `OCRProcessing` elements instead.
+writes two `OCRProcessing` elements instead. For output processed with a custom pack,
+`softwareVersion` includes the pack name and version as build metadata, for example
+`1.9.0+sk-theses.1.0`, and `applicationDescription` also records `domain sk-theses 1.0.0`.
+Built-in output keeps the core version alone. PAGE XML uses the combined version in `Creator`
+and adds a `domain` metadata item for pack output.
 
 ### Confidence
 
@@ -243,7 +247,8 @@ PcGts
 │   ├── Creator                        TuzkaOCR <version>
 │   ├── Created / LastChange
 │   ├── MetadataItem type="processingStep" name="layout"       value=<layout model>
-│   └── MetadataItem type="processingStep" name="recognition"  value=<recognition model>
+│   ├── MetadataItem type="processingStep" name="recognition"  value=<recognition model>
+│   └── MetadataItem type="processingStep" name="domain"       value=<pack name and version>
 └── Page imageFilename imageWidth imageHeight [primaryLanguage]
     ├── ReadingOrder → OrderedGroup → RegionRefIndexed index regionRef
     └── TextRegion id="r0001" type custom="readingOrder {index:0;}"

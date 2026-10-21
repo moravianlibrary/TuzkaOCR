@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import dataclasses
 import sys
 import time
 from concurrent.futures import ProcessPoolExecutor, as_completed
@@ -43,7 +44,7 @@ def main() -> None:
         description="tuzkaocr — OCR pipeline for scanned page and document images",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
-    p.add_argument("input", help="Image file or directory (with --batch)")
+    p.add_argument("input", nargs="?", help="Image file or directory (with --batch)")
     p.add_argument("--out",      default=None,    help="Output file path (single image)")
     p.add_argument("--out-dir",  default="results", help="Output directory (batch mode)")
     p.add_argument("--format",   choices=["alto", "page", "txt", "multi"], default="alto",
@@ -52,7 +53,7 @@ def main() -> None:
     p.add_argument("--batch",    action="store_true", help="Process all images in a directory")
     p.add_argument("--workers",  type=int, default=2, help="Parallel page workers (batch)")
 
-    p.add_argument("--domain",       choices=["default", "print", "kramarky", "handwritten", "kurrent"], default="default",
+    p.add_argument("--domain", default="default",
                    help="Preset model pair; --layout-model/--ocr-model override individual slots")
     p.add_argument("--layout-model", default=None,
                    help="Override layout model (bundled filename or path); default depends on --domain")
@@ -68,11 +69,11 @@ def main() -> None:
     p.add_argument("--line-workers", type=int, default=4,
                    help="Parallel line OCR threads per page")
 
-    p.add_argument("--height-scale", type=float, default=1.0,
+    p.add_argument("--height-scale", type=float, default=None,
                    help="Multiply predicted line heights (use 1.5 if layout model underestimates)")
     p.add_argument("--no-adaptive", dest="adaptive", action="store_false",
                    help="Disable adaptive downsampling (fixed-downsample layout instead of sizing it to the text)")
-    p.set_defaults(adaptive=True)
+    p.set_defaults(adaptive=None)
     p.add_argument("--reading-order", choices=["columns", "basic"], default=None,
                    help="Block reading order for printed pages: columns (column by column, "
                         "aware of printed rules) or basic (horizontal bands); default "
@@ -80,7 +81,7 @@ def main() -> None:
     p.add_argument("--no-large-text", dest="large_text", action="store_false",
                    help="Disable the extra layout pass for text far larger than the body "
                         "text (newspaper mastheads)")
-    p.set_defaults(large_text=True)
+    p.set_defaults(large_text=None)
     p.add_argument("--role-classifier", dest="role_classifier", action="store_true",
                    help="Tag each line with role (body/heading/header/footer/page_number) in ALTO TYPE attr")
     p.set_defaults(role_classifier=False)
@@ -116,56 +117,98 @@ def main() -> None:
     p.add_argument("--ndk-warn", action="store_true",
                    help="Report NDK profile fields that could not be filled from the input "
                         "or the configuration")
+    p.add_argument("--version", action="store_true", help="Show the core and default domain version")
+    p.add_argument("--list-domains", action="store_true", help="List built-in and installed domains")
+    p.add_argument("--check-domains", action="store_true", help="Validate every installed domain pack")
 
     args = p.parse_args()
+    from tuzkaocr import __version__
+    from tuzkaocr.config import Config
+    from tuzkaocr.domains import DomainPackError, DomainRegistry, build_domain_config, validate_registry_packs
+
+    _base = Config()
+    try:
+        registry = DomainRegistry(_base, check=args.check_domains)
+    except DomainPackError as exc:
+        print(f"error: {exc}", file=sys.stderr, flush=True)
+        raise SystemExit(2)
+
+    if args.check_domains:
+        errors = validate_registry_packs(registry)
+        if not registry.pack_statuses:
+            print("No custom domain packs found.")
+        for status in registry.pack_statuses:
+            if status.status == "ok":
+                print(f"OK {status.source.name}: {status.name} {status.version}")
+            else:
+                print(f"ERROR {status.source.name}: {status.reason}")
+        raise SystemExit(1 if errors else 0)
+
+    if args.version:
+        print(f"TuzkaOCR {__version__}")
+        default_domain = registry.default_domain
+        if default_domain.pack:
+            pack = default_domain.pack
+            model = Path(str(pack.models["ocr"])).stem
+            print(f'custom domain: {pack.name} {pack.version} "{pack.title}" (default)')
+            print(f"  base {pack.base} · model {model} · requires {pack.requires_tuzkaocr} · checksums ok")
+        raise SystemExit(0)
+
+    if args.list_domains:
+        print(f"default: {registry.default_name}")
+        for name in ("print", "kramarky", "handwritten", "kurrent"):
+            print(f"{name} (built-in)")
+        for status in registry.pack_statuses:
+            if status.status == "ok":
+                marker = " (default)" if registry.default_name == status.name else ""
+                print(f"{status.name} {status.version} — {status.title} [{status.base}]{marker}")
+            else:
+                print(f"{status.source.name}: {status.status} — {status.reason}")
+        raise SystemExit(0)
+
+    if not args.input:
+        p.error("input is required unless --version, --list-domains, or --check-domains is used")
+
+    try:
+        domain = registry.resolve(args.domain)
+    except KeyError:
+        p.error(f"unknown domain {args.domain!r}. Allowed: {', '.join(registry.names())}")
+
     if args.physical_img_nr is not None and args.physical_img_nr <= 0:
         p.error("--physical-img-nr must be a positive integer")
     if args.batch and (args.physical_img_nr is not None or args.source_identifier is not None):
         p.error("--physical-img-nr and --source-identifier apply to a single image, not --batch")
 
     from tuzkaocr.alto import physical_page_number
-    from tuzkaocr.config import Config
-    _base = Config()
-    if args.domain == "kramarky":
-        domain_layout = _base.kramarky_layout_model
-        domain_ocr    = _base.kramarky_ocr_model
-    elif args.domain == "handwritten":
-        domain_layout = _base.handwritten_layout_model
-        domain_ocr    = _base.handwritten_ocr_model
-    elif args.domain == "kurrent":
-        domain_layout = _base.kurrent_layout_model
-        domain_ocr    = _base.kurrent_ocr_model
-    else:
-        domain_layout = _base.layout_model
-        domain_ocr    = _base.ocr_model
-
-    is_print = args.domain in ("default", "print")
-    cfg_kwargs = dict(
-        layout_model  = args.layout_model or domain_layout,
-        ocr_model     = args.ocr_model    or domain_ocr,
-        vocab         = args.vocab        or _base.vocab,
-        device        = args.device,
-        ocr_threads   = args.ocr_threads,
-        line_workers  = args.line_workers,
-        page_workers  = args.workers,
-        height_scale  = args.height_scale,
-        adaptive_downsample = args.adaptive and is_print,
-        reading_order = (args.reading_order or _base.reading_order) if is_print else "basic",
-        large_text = args.large_text and _base.large_text and is_print,
-        role_classifier = args.role_classifier,
-        crop_endpoint_ext = (0.3 if args.domain in ("handwritten", "kurrent") else 0.0),
-        column_split = args.domain in ("handwritten", "kurrent"),
-        alto_profile = args.alto_profile or _base.alto_profile,
-        orientation = args.orientation or _base.orientation,
-        orientation_threshold = (args.orientation_threshold if args.orientation_threshold is not None
-                                 else _base.orientation_threshold),
-        orientation_probe = args.orientation_probe or _base.orientation_probe,
-        contrast = args.contrast or _base.contrast,
-        alto_lang = args.alto_lang if args.alto_lang is not None else _base.alto_lang,
-        alto_agency = args.alto_agency if args.alto_agency is not None else _base.alto_agency,
-        alto_dpi = args.alto_dpi if args.alto_dpi is not None else _base.alto_dpi,
-        alto_page_width_mm = (args.alto_page_width_mm if args.alto_page_width_mm is not None
-                              else _base.alto_page_width_mm),
+    overrides = {
+        "layout_model": args.layout_model,
+        "ocr_model": args.ocr_model,
+        "vocab": args.vocab,
+        "device": args.device,
+        "ocr_threads": args.ocr_threads,
+        "line_workers": args.line_workers,
+        "page_workers": args.workers,
+        "height_scale": args.height_scale,
+        "adaptive_downsample": False if args.adaptive is False else None,
+        "reading_order": args.reading_order if domain.base == "print" else None,
+        "large_text": False if args.large_text is False else None,
+        "role_classifier": args.role_classifier,
+        "alto_profile": args.alto_profile,
+        "orientation": args.orientation,
+        "orientation_threshold": args.orientation_threshold,
+        "orientation_probe": args.orientation_probe,
+        "contrast": args.contrast,
+        "alto_lang": args.alto_lang,
+        "alto_agency": args.alto_agency,
+        "alto_dpi": args.alto_dpi,
+        "alto_page_width_mm": args.alto_page_width_mm,
+    }
+    cfg = build_domain_config(
+        _base, domain, explicit_overrides=overrides,
+    )
+    cfg_kwargs = dataclasses.asdict(cfg)
+    domain_display = domain.name if domain.pack else (
+        "default" if args.domain in ("default", "", None) else domain.name
     )
 
     if (args.ndk_warn and cfg_kwargs["alto_profile"] == "ndk"
@@ -177,7 +220,6 @@ def main() -> None:
     if not args.batch:
         from tuzkaocr.pipeline import PageProcessor
 
-        cfg = Config(**cfg_kwargs)
         processor = PageProcessor(cfg)
 
         img_path = Path(args.input)
@@ -206,19 +248,19 @@ def main() -> None:
             n_strings = result["alto"].count("<String ")
             print(f"Done in {elapsed:.1f}s — {n_strings} words, {n_lines} lines → "
                   f"{out_path}.alto.xml, {out_path}.txt; "
-                  f"{_orientation_summary(metadata)}", flush=True)
+                  f"{_orientation_summary(metadata)} domain={domain_display}", flush=True)
         elif args.format == "page":
             n_words = result.count("<Word ")
             print(f"Done in {elapsed:.1f}s — {n_words} words → {out_path}; "
-                  f"{_orientation_summary(metadata)}", flush=True)
+                  f"{_orientation_summary(metadata)} domain={domain_display}", flush=True)
         elif args.format == "txt":
             n_lines = result.count("\n")
             print(f"Done in {elapsed:.1f}s — {n_lines} lines → {out_path}; "
-                  f"{_orientation_summary(metadata)}", flush=True)
+                  f"{_orientation_summary(metadata)} domain={domain_display}", flush=True)
         else:
             n_strings = result.count("<String ")
             print(f"Done in {elapsed:.1f}s — {n_strings} words → {out_path}; "
-                  f"{_orientation_summary(metadata)}", flush=True)
+                  f"{_orientation_summary(metadata)} domain={domain_display}", flush=True)
 
     else:
         in_dir  = Path(args.input)
@@ -262,13 +304,14 @@ def main() -> None:
                 done += 1
                 if err:
                     errors += 1
-                    print(f"[{done:4d}/{len(images)}] ERROR {Path(img_path).name}: {err}",
+                    print(f"[{done:4d}/{len(images)}] ERROR {Path(img_path).name} "
+                          f"domain={domain_display}: {err}",
                           flush=True)
                 else:
                     eta = (time.time() - t0) / done * (len(images) - done)
                     print(f"[{done:4d}/{len(images)}] {Path(img_path).name} "
                           f"{elapsed:.1f}s  ETA {eta/60:.1f}m  "
-                          f"{_orientation_summary(metadata)}", flush=True)
+                          f"{_orientation_summary(metadata)} domain={domain_display}", flush=True)
 
         total = time.time() - t0
         print(f"\nDone: {done - errors}/{len(images)} OK, {errors} errors, "

@@ -9,6 +9,14 @@ in batch mode are `.jpg`, `.jpeg`, `.png`, `.tif`, and `.tiff`.
 
 From a checkout without installing, use `python cli.py` in place of `tuzkaocr`.
 
+The information flags do not need an input image:
+
+```bash
+tuzkaocr --version
+tuzkaocr --list-domains
+tuzkaocr --check-domains
+```
+
 ## Single page
 
 === "ALTO XML"
@@ -61,7 +69,8 @@ replaced: `page.jpg` becomes `page.alto.xml`, `page.page.xml`, `page.txt`, or AL
 ## Choosing a domain
 
 `--domain` selects the model pair and matters more than any other setting — see
-[Models and domains](models.md).
+[Models and domains](models.md). Built-in and installed pack names are accepted. See
+[Custom domain packs](custom-domains.md) for installation and version reporting.
 
 ```bash
 tuzkaocr letter.jpg --domain handwritten --format txt --out letter.txt
@@ -73,6 +82,10 @@ tuzkaocr letter.jpg --domain handwritten --format txt --out letter.txt
 | `kramarky` | Kramarky broadsheet prints (a narrow, specialised domain) |
 | `handwritten` | Czech handwriting |
 | `kurrent` | German Kurrent / Sütterlin script |
+| `<pack-name>` | A loaded custom domain pack |
+
+When a pack is marked as the default, `default` selects it. `print` and `printed` always
+select the built-in print domain, so `--domain print` bypasses a default pack.
 
 ## Batch processing
 
@@ -132,7 +145,7 @@ None of these are needed for ordinary OCR. See [Configuration](configuration.md#
 
 | Option | Default | Effect |
 |---|---|---|
-| `--domain` | `default` | Preset model pair: `default`, `print`, `kramarky`, `handwritten`, `kurrent` |
+| `--domain` | `default` | Built-in domain or loaded custom pack name; see [custom domain packs](custom-domains.md) |
 | `--layout-model` | *per domain* | Override the layout model, by bundled filename or path |
 | `--ocr-model` | *per domain* | Override the recognition model, by bundled filename or path |
 | `--vocab` | `vocab.json` | Override the recognizer character set |
@@ -154,8 +167,8 @@ None of these are needed for ordinary OCR. See [Configuration](configuration.md#
 
 | Option | Default | Effect |
 |---|---|---|
-| `--height-scale` | `1.0` | Multiply predicted line heights; try `1.5` if crops clip ascenders |
-| `--no-adaptive` | *adaptive on* | Use the fixed layout downsample instead of sizing it to the page's text |
+| `--height-scale` | `TUZKAOCR_HEIGHT_SCALE` (`1.0`) | Multiply predicted line heights; try `1.5` if crops clip ascenders |
+| `--no-adaptive` | `TUZKAOCR_ADAPTIVE_DOWNSAMPLE` (on) | Use the fixed layout downsample instead of sizing it to the page's text |
 | `--reading-order` | `columns` | Block order on printed pages: `columns` or `basic` |
 | `--no-large-text` | *large text on* | Skip the extra layout pass for mastheads and other very large text |
 | `--role-classifier` | off | Tag each line with a structural role in the ALTO output |
@@ -185,3 +198,11 @@ TUZKAOCR_OCR_THREADS=8 tuzkaocr page.jpg --out result.alto.xml
 ```
 
 The full list is in [Configuration](configuration.md).
+
+### Domain information
+
+| Flag | Effect |
+|---|---|
+| `--version` | Show the core version and active default pack, if any |
+| `--list-domains` | List built-in, loaded, and skipped domains |
+| `--check-domains` | Validate pack manifests, checksums, recognizers, and vocabularies; exits non-zero for invalid packs |

@@ -28,11 +28,12 @@ file.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `GET` | `/healthz` | Liveness check; never authenticated |
+| `GET` | `/healthz` | Liveness, core version, and whether valid custom packs are loaded; never authenticated |
+| `GET` | `/api/v1/version` | Core version and custom domain pack status |
 | `POST` | `/api/v1/process` | Submit an image, receive a job ID |
 | `GET` | `/api/v1/status/{job_id}` | Job state, line count, mean confidence |
 | `GET` | `/api/v1/result/{job_id}` | Download the finished output |
-| `GET` | `/api/v1/models` | Configured and bundled models |
+| `GET` | `/api/v1/models` | Configured and bundled models, including loaded custom domains |
 
 Legacy-compatible aliases exist for older clients — see [below](#legacy-endpoints).
 
@@ -43,7 +44,7 @@ Legacy-compatible aliases exist for older clients — see [below](#legacy-endpoi
 | Field | Type | Default | Values |
 |---|---|---|---|
 | `image` | file | *required* | JPEG, PNG, or TIFF |
-| `domain` | string | printed | `default`, `print`, `kramarky`, `handwritten`, `kurrent` |
+| `domain` | string | printed | `default`, `print`, a built-in domain, or a loaded pack name |
 | `fmt` | string | `alto` | `alto`, `page`, `txt`, `multi` |
 | `role_classifier` | bool | server default | `true` / `false` |
 | `alto_profile` | string | server default (`ndk`) | `ndk`, `basic` |
@@ -61,7 +62,9 @@ curl -F "image=@page.jpg" http://localhost:8000/api/v1/process
 {"job_id": "3f2b1c8e-5d47-4a19-9c33-8e1f0a7b6d24", "status": "queued"}
 ```
 
-Invalid values are rejected with **400** before the job is created.
+Invalid format and setting values are rejected with **400** before the job is created. An
+unknown domain returns **422** and lists the built-in domains and loaded pack names. `default`
+uses a pack marked as default, when present; `print` always selects the built-in print domain.
 
 `orientation` and `contrast` are explained in [Configuration](configuration.md#page-orientation).
 
@@ -121,11 +124,11 @@ curl -o result.txt      "http://localhost:8000/api/v1/result/$JOB?which=txt"
 |---|---|
 | `200` | Result returned |
 | `202` | Job accepted but still `queued` or `running` |
-| `400` | Unknown `domain`, `fmt`, `alto_profile`, `which`, or an invalid `physical_img_nr` |
+| `400` | Unknown `fmt`, `alto_profile`, `which`, or an invalid `physical_img_nr` |
 | `401` | Missing or invalid API key, when authentication is enabled |
 | `404` | Unknown job ID, or no result file for it |
 | `413` | Request body exceeds `TUZKAOCR_MAX_UPLOAD_MB` |
-| `422` | The image could not be decoded, or exceeds `TUZKAOCR_MAX_IMAGE_PIXELS` |
+| `422` | Unknown `domain`, the image could not be decoded, or it exceeds `TUZKAOCR_MAX_IMAGE_PIXELS` |
 | `500` | Processing failed for another reason; `error` carries the message |
 | `503` | Queue is full; a `Retry-After: 5` header is included |
 
@@ -183,7 +186,27 @@ Off by default, which is only safe on a trusted network. Two modes, both using t
     python -c "import secrets; print(secrets.token_urlsafe(32))"
     ```
 
-`/healthz` is never authenticated, so health checks keep working.
+`/healthz` is never authenticated, so health checks keep working. It returns only the core
+version and a `custom` boolean; pack names are not exposed on this public endpoint:
+
+```json
+{"status": "ok", "version": "1.9.0", "custom": false}
+```
+
+`GET /api/v1/version` uses the API key when authentication is enabled and lists pack names,
+versions, bases, and any skipped-pack reason:
+
+```json
+{
+  "version": "1.9.0",
+  "custom": true,
+  "default_domain": "slovak",
+  "domains": [
+    {"name": "slovak", "version": "1.0.0", "title": "Slovak print", "base": "print",
+     "ocr_model": "rec-sk.onnx", "default": true, "status": "ok", "reason": null}
+  ]
+}
+```
 
 ## Listing models
 
@@ -193,17 +216,21 @@ curl -s http://localhost:8000/api/v1/models
 
 ```json
 {
+  "version": "1.9.0",
   "defaults":    {"ocr_model": "rec-E-v7.onnx",  "layout_model": "dec-B-v2.onnx", "height_scale": 1.0},
   "kramarky":    {"ocr_model": "rec-E-v4k7.onnx", "layout_model": "dec-B-v1k.onnx"},
   "handwritten": {"ocr_model": "rec-I-v2.onnx",  "layout_model": "dec-B-v2h.onnx"},
   "kurrent":     {"ocr_model": "rec-I-v2.onnx",  "layout_model": "dec-B-v2h.onnx"},
+  "domains":     [{"name": "slovak", "version": "1.0.0", "base": "print", "status": "ok"}],
+  "slovak":      {"ocr_model": "rec-sk.onnx", "layout_model": "dec-B-v2.onnx"},
   "available":   {"ocr_models": ["..."], "layout_models": ["..."]},
-  "selectable_via_domain": ["default", "handwritten", "kramarky", "kurrent"]
+  "selectable_via_domain": ["default", "handwritten", "kramarky", "kurrent", "slovak"]
 }
 ```
 
-Only `selectable_via_domain` values are accepted as a `domain`; pinning another model is a
-[server-side setting](models.md#pinning-a-model).
+Loaded packs appear under their own key and in `selectable_via_domain`. Only the public
+`/healthz` endpoint omits pack names; the API-key-protected version and models endpoints list
+them. Pinning another model is a [server-side setting](models.md#pinning-a-model).
 
 ## A complete client
 

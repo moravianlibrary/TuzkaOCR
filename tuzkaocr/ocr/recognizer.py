@@ -85,6 +85,56 @@ def _providers(device: str) -> list[str]:
     return ["CPUExecutionProvider"]
 
 
+def _model_class_count(session, model_path: str | Path, style_dim: int | None = None) -> int:
+    output_shape = session.get_outputs()[0].shape
+    class_dim = output_shape[-1] if output_shape else None
+    if isinstance(class_dim, (int, np.integer)) and class_dim > 0:
+        return int(class_dim)
+    inputs = session.get_inputs()
+    input_names = {item.name for item in inputs}
+    if {"image", "style", "has_style"}.issubset(input_names):
+        if style_dim is None:
+            style_shape = next(item.shape for item in inputs if item.name == "style")
+            style_dim = style_shape[-1] if style_shape else None
+        if not isinstance(style_dim, (int, np.integer)) or style_dim <= 0:
+            raise ValueError(f"Cannot validate output classes for model {model_path}: style dimension is unknown")
+        output = session.run(None, {
+            "image": np.zeros((1, 1, 40, 32), dtype=np.float32),
+            "style": np.zeros((1, int(style_dim)), dtype=np.float32),
+            "has_style": np.zeros((1,), dtype=np.float32),
+        })[0]
+        return int(output.shape[-1])
+    item = inputs[0]
+    shape = []
+    for index, dimension in enumerate(item.shape):
+        if isinstance(dimension, (int, np.integer)) and dimension > 0:
+            shape.append(int(dimension))
+        elif index == 0:
+            shape.append(1)
+        elif index == 1 and len(item.shape) == 4:
+            shape.append(1)
+        elif index == 2 and len(item.shape) == 4:
+            shape.append(40)
+        elif index == 3 and len(item.shape) == 4:
+            shape.append(32)
+        else:
+            shape.append(1)
+    output = session.run(None, {item.name: np.zeros(shape, dtype=np.float32)})[0]
+    return int(output.shape[-1])
+
+
+def _validate_vocab_class_count(class_count: int, model_path: str | Path,
+                                vocab_path: str | Path | None, chars: list[str]) -> None:
+    covered = len(chars) + 1
+    if class_count > covered:
+        vocab_name = str(vocab_path) if vocab_path is not None else "vocab.json"
+        raise ValueError(
+            f"model {model_path} expects {class_count} classes, vocab {vocab_name} "
+            f"covers {covered}; use the vocab shipped with the model "
+            f"(vocab has only {len(chars)} characters plus the CTC blank)"
+        )
+
+
 class OnnxRecognizer:
     def __init__(self, model_path: str | Path, vocab_path: str | Path | None = None,
                  device: str = "cpu", threads: int = 4, max_width: int = 1600,
@@ -97,6 +147,13 @@ class OnnxRecognizer:
             providers=_providers(device)
         )
         self._input_name = self.session.get_inputs()[0].name
+        input_names = {item.name for item in self.session.get_inputs()}
+        output_shape = self.session.get_outputs()[0].shape
+        class_dim = output_shape[-1] if output_shape else None
+        if isinstance(class_dim, (int, np.integer)) or not {"style", "has_style"}.issubset(input_names):
+            _validate_vocab_class_count(
+                _model_class_count(self.session, model_path), model_path, vocab_path, self.chars
+            )
 
     def run_line(self, crop_gray: np.ndarray) -> LineResult:
         w = min(crop_gray.shape[1], self.max_width)
@@ -166,31 +223,8 @@ class PageStyleRecognizer(OnnxRecognizer):
 
     def _validate_class_count(self, model_path: str | Path,
                               vocab_path: str | Path | None) -> None:
-        output_shape = self.session.get_outputs()[0].shape
-        class_dim = output_shape[-1] if output_shape else None
-        if not isinstance(class_dim, (int, np.integer)):
-            input_names = {item.name for item in self.session.get_inputs()}
-            if not {"image", "style", "has_style"}.issubset(input_names):
-                raise ValueError(
-                    f"Cannot validate output classes for model {model_path}: expected page-style "
-                    "inputs image, style, and has_style."
-                )
-            image = np.zeros((1, 1, 40, 32), dtype=np.float32)
-            style = np.zeros((1, self.style_dim), dtype=np.float32)
-            has_style = np.zeros((1,), dtype=np.float32)
-            output = self.session.run(None, {
-                "image": image,
-                "style": style,
-                "has_style": has_style,
-            })[0]
-            class_dim = output.shape[-1]
-        if int(class_dim) > len(self.chars) + 1:
-            vocab_name = str(vocab_path) if vocab_path is not None else "vocab.json"
-            raise ValueError(
-                f"Model {model_path} has {int(class_dim)} output classes, but vocabulary "
-                f"{vocab_name} has only {len(self.chars)} characters and covers "
-                f"{len(self.chars) + 1} classes including CTC blank."
-            )
+        class_count = _model_class_count(self.session, model_path, self.style_dim)
+        _validate_vocab_class_count(class_count, model_path, vocab_path, self.chars)
 
     @classmethod
     def _from_recognizer(cls, recognizer: OnnxRecognizer,
