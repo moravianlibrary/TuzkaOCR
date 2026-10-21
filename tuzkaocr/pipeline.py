@@ -3,6 +3,7 @@ from __future__ import annotations
 from collections import defaultdict
 from dataclasses import dataclass
 from pathlib import Path
+import threading
 from typing import List, Optional, Tuple
 
 import cv2
@@ -10,7 +11,7 @@ import numpy as np
 
 from . import _models
 from .config import Config
-from .images import decode_image_path, dpi_from_page_width, read_image_dpi
+from .images import decode_gray_image_path, decode_image_path, dpi_from_page_width, read_image_dpi
 from .layout.detector import LayoutDetector
 from .layout.large_text import stretch_crop
 from .lang import LanguageDetector
@@ -18,6 +19,7 @@ from .layout.role import RoleClassifier
 from .ocr.recognizer import create_recognizer
 from .alto import HYPHEN_CHARS, build_alto
 from .pagexml import build_page_xml
+from .orientation import CLASS_ANGLES, OrientationClassifier
 
 
 @dataclass
@@ -144,6 +146,152 @@ def _blocks_to_text(blocks: List[dict]) -> str:
     return "\n".join(parts).rstrip() + "\n"
 
 
+def _rotate_rect_back(box: tuple, page_w: int, page_h: int,
+                      angle: int) -> tuple[int, int, int, int]:
+    x, y, width, height = (int(value) for value in box)
+    if angle == 90:
+        return page_w - y - height, x, height, width
+    if angle == 180:
+        return page_w - x - width, page_h - y - height, width, height
+    if angle == 270:
+        return y, page_h - x - width, height, width
+    return x, y, width, height
+
+
+def _rotate_point_back(point: tuple, page_w: int, page_h: int,
+                       angle: int) -> tuple[float, float]:
+    x, y = (float(value) for value in point)
+    if angle == 90:
+        return page_w - 1 - y, x
+    if angle == 180:
+        return page_w - 1 - x, page_h - 1 - y
+    if angle == 270:
+        return y, page_h - 1 - x
+    return x, y
+
+
+def _map_blocks_back(blocks: list, page_w: int, page_h: int, angle: int) -> list:
+    if angle == 0:
+        return blocks
+    for block in blocks:
+        if block.get("polygon"):
+            block["polygon"] = [
+                _rotate_point_back(point, page_w, page_h, angle)
+                for point in block["polygon"]
+            ]
+        block["rotation"] = (-angle) % 360
+        for line in block["lines"]:
+            line["style_hpos"] = line["hpos"]
+            line["style_vpos"] = line["vpos"]
+            line["style_width"] = line["width"]
+            line["style_height"] = line["height"]
+            line["hpos"], line["vpos"], line["width"], line["height"] = (
+                _rotate_rect_back(
+                    (line["hpos"], line["vpos"], line["width"], line["height"]),
+                    page_w, page_h, angle,
+                )
+            )
+            for key in ("polygon", "baseline"):
+                if line.get(key):
+                    line[key] = [
+                        _rotate_point_back(point, page_w, page_h, angle)
+                        for point in line[key]
+                    ]
+            for word in line["words"]:
+                word["hpos"], word["vpos"], word["width"], word["height"] = (
+                    _rotate_rect_back(
+                        (word["hpos"], word["vpos"], word["width"], word["height"]),
+                        page_w, page_h, angle,
+                    )
+                )
+                for key in ("stem_box", "hyp_box"):
+                    if word.get(key):
+                        word[key] = _rotate_rect_back(word[key], page_w, page_h, angle)
+            if line.get("spaces"):
+                mapped_spaces = []
+                for space in line["spaces"]:
+                    x, y, width, height = _rotate_rect_back(
+                        (space["hpos"], space["vpos"], space["width"], space["height"]),
+                        page_w, page_h, angle,
+                    )
+                    mapped_spaces.append({"hpos": x, "vpos": y, "width": width})
+                line["spaces"] = mapped_spaces
+    return blocks
+
+
+def _add_space_boxes(blocks: list) -> None:
+    for block in blocks:
+        for line in block["lines"]:
+            words = line["words"]
+            if len(words) < 2:
+                continue
+            spaces = []
+            for left, right in zip(words, words[1:]):
+                x = left["hpos"] + left["width"]
+                right_edge = max(x, right["hpos"])
+                spaces.append({
+                    "hpos": x,
+                    "vpos": line["vpos"],
+                    "width": right_edge - x,
+                    "height": line["height"],
+                })
+            line["spaces"] = spaces
+
+
+def _probe_score(chosen: dict) -> tuple[float, int]:
+    weighted = 0.0
+    char_count = 0
+    for result in chosen["results"]:
+        for word in result.words:
+            count = len(word.text)
+            if not count:
+                continue
+            confidence = (float(np.mean(word.char_conf)) if word.char_conf
+                          else float(result.confidence))
+            weighted += confidence * count
+            char_count += count
+    return (weighted / char_count if char_count else 0.0), char_count
+
+
+def _choose_probe_angle(scores: dict[int, tuple[float, int]]) -> int:
+    candidates = sorted(scores)
+    best_angle = max(
+        candidates,
+        key=lambda candidate: scores[candidate][0] if scores[candidate][1] >= 30 else 0.0,
+    )
+    upright_score = scores[0][0] if scores[0][1] >= 30 else 0.0
+    best_score = scores[best_angle][0] if scores[best_angle][1] >= 30 else 0.0
+    if best_angle != 0 and best_score - upright_score < 0.05 - 1e-12:
+        return 0
+    return best_angle
+
+
+def _probe_candidates(run_angle, candidate_angles: tuple[int, ...] | list[int],
+                      candidates: Optional[dict[int, tuple]] = None):
+    runs = {} if candidates is None else dict(candidates)
+    for candidate in candidate_angles:
+        if candidate not in runs:
+            runs[candidate] = run_angle(candidate)
+    scores = {candidate: _probe_score(runs[candidate][1]) for candidate in runs}
+    return runs, scores
+
+
+def _contrast_stats(gray: np.ndarray, downsample: bool = False) -> tuple[float, float]:
+    sample = gray
+    if downsample and sample.size > 65536:
+        step = int(np.ceil(np.sqrt(sample.size / 65536)))
+        sample = sample[::step, ::step]
+    low, median = np.percentile(sample, (0.5, 50.0))
+    return float(low), float(median)
+
+
+def _contrast_stretch(gray: np.ndarray, low: float, median: float) -> np.ndarray:
+    if median - low <= 8.0:
+        return gray
+    return np.clip((gray.astype(np.float32) - low) * (255.0 / (median - low)),
+                   0, 255).astype(np.uint8)
+
+
 class PageProcessor:
     def __init__(self, config: Config):
         self.config = config
@@ -175,6 +323,8 @@ class PageProcessor:
         self._layout_model_path = layout_path
         self._role: Optional[RoleClassifier] = None
         self._lang: Optional[LanguageDetector] = None
+        self._orientation: Optional[OrientationClassifier] = None
+        self._orientation_lock = threading.Lock()
 
     def _layout_pass(self, img_bgr: np.ndarray) -> dict:
         if self.config.adaptive_downsample and self.config.layout_line_height > 0:
@@ -186,6 +336,7 @@ class PageProcessor:
 
     def _recognize_pass(self, img_bgr: np.ndarray, hs: float, lp: dict) -> dict:
         img_scale = lp["img_scale"]
+        contrast_mode = lp.get("contrast_mode", self.config.contrast)
         line_data: List[_LineInput] = []
         for ri, region in enumerate(lp["regions"]):
             _pitch_calibrate(region.lines)
@@ -197,6 +348,9 @@ class PageProcessor:
                     continue
                 if line.large:
                     gray, M = stretch_crop(gray, M)
+                if contrast_mode == "line":
+                    low, median = _contrast_stats(gray)
+                    gray = _contrast_stretch(gray, low, median)
                 line_data.append(_LineInput(
                     gray=gray, M=M, region_idx=ri,
                     baseline=[(x * img_scale, y * img_scale) for x, y in line.baseline]))
@@ -258,16 +412,116 @@ class PageProcessor:
 
     def _run(self, img_bgr: np.ndarray,
              height_scale: Optional[float] = None,
-             role_classifier: Optional[bool] = None):
+             role_classifier: Optional[bool] = None,
+             orientation: Optional[str] = None,
+             orientation_threshold: Optional[float] = None,
+             orientation_probe: Optional[str] = None,
+             contrast: Optional[str] = None,
+             orientation_image: Optional[np.ndarray] = None):
         img_h, img_w = img_bgr.shape[:2]
         cfg = self.config
         hs = cfg.height_scale if height_scale is None else height_scale
 
-        lp = self._layout_pass(img_bgr)
-        chosen = self._recognize_pass(img_bgr, hs, lp)
+        mode = cfg.orientation if orientation is None else orientation
+        threshold = (cfg.orientation_threshold if orientation_threshold is None
+                     else float(orientation_threshold))
+        probe_mode = cfg.orientation_probe if orientation_probe is None else orientation_probe
+        contrast_mode = cfg.contrast if contrast is None else contrast
+        if not 0.0 <= threshold <= 1.0:
+            raise ValueError("orientation threshold must be in [0, 1]")
+        if probe_mode not in ("on", "off"):
+            raise ValueError("orientation probe must be 'on' or 'off'")
+        if contrast_mode not in ("off", "on", "auto", "line"):
+            raise ValueError("contrast must be 'off', 'on', 'auto' or 'line'")
 
-        blocks = self._assemble_blocks(chosen["line_data"], chosen["results"],
-                                       chosen.get("regions"), chosen.get("img_scale") or 1.0)
+        page_contrast_stats = None
+        use_page_contrast = contrast_mode in ("on", "auto")
+        if use_page_contrast:
+            page_gray = cv2.cvtColor(img_bgr, cv2.COLOR_BGR2GRAY)
+            page_contrast_stats = _contrast_stats(page_gray, downsample=True)
+            if contrast_mode == "auto" and page_contrast_stats[0] <= cfg.contrast_ink:
+                use_page_contrast = False
+
+        def run_angle(angle: int):
+            upright = (np.rot90(img_bgr, k=angle // 90).copy() if angle else img_bgr)
+            if use_page_contrast:
+                gray = cv2.cvtColor(upright, cv2.COLOR_BGR2GRAY)
+                gray = _contrast_stretch(gray, *page_contrast_stats)
+                upright = cv2.cvtColor(gray, cv2.COLOR_GRAY2BGR)
+            lp = self._layout_pass(upright)
+            lp["contrast_mode"] = contrast_mode
+            chosen = self._recognize_pass(upright, hs, lp)
+            blocks = self._assemble_blocks(
+                chosen["line_data"], chosen["results"], chosen.get("regions"),
+                chosen.get("img_scale") or 1.0,
+            )
+            return upright, chosen, blocks
+
+        candidates: dict[int, tuple] = {}
+        fully_probed = False
+        if mode == "off":
+            angle = 0
+            upright, chosen, blocks = run_angle(angle)
+            orientation_meta = {
+                "orientation_angle": 0,
+                "orientation_confidence": None,
+                "orientation_classifier_confidence": None,
+                "orientation_method": "off",
+            }
+        elif mode == "auto":
+            with self._orientation_lock:
+                if self._orientation is None:
+                    self._orientation = OrientationClassifier(cfg.orientation_model)
+                orientation_model = self._orientation
+            predicted_angle, classifier_confidence, _ = orientation_model.predict(
+                orientation_image if orientation_image is not None else img_bgr
+            )
+            if probe_mode == "on" and (classifier_confidence < threshold or predicted_angle != 0):
+                if classifier_confidence < threshold:
+                    candidate_angles = list(CLASS_ANGLES)
+                else:
+                    candidate_angles = [0, predicted_angle]
+                candidates, scores = _probe_candidates(run_angle, candidate_angles)
+                fully_probed = len(candidate_angles) == len(CLASS_ANGLES)
+                best_angle = _choose_probe_angle(scores)
+                angle = best_angle
+                upright, chosen, blocks = candidates[angle]
+                orientation_meta = {
+                    "orientation_angle": angle,
+                    "orientation_confidence": scores[angle][0],
+                    "orientation_classifier_confidence": classifier_confidence,
+                    "orientation_method": "probe",
+                }
+            else:
+                angle = predicted_angle
+                upright, chosen, blocks = run_angle(angle)
+                candidates = {angle: (upright, chosen, blocks)}
+                orientation_meta = {
+                    "orientation_angle": angle,
+                    "orientation_confidence": classifier_confidence,
+                    "orientation_classifier_confidence": classifier_confidence,
+                    "orientation_method": "classifier",
+                }
+        else:
+            raise ValueError("orientation must be 'off' or 'auto'")
+
+        recheck_performed = False
+        if (mode == "auto" and cfg.orientation_recheck == "on"
+                and not fully_probed):
+            initial_char_conf, initial_chars = _probe_score(chosen)
+            if (initial_char_conf < cfg.orientation_recheck_conf
+                    and initial_chars >= cfg.orientation_recheck_chars):
+                candidates, scores = _probe_candidates(run_angle, CLASS_ANGLES, candidates)
+                angle = _choose_probe_angle(scores)
+                upright, chosen, blocks = candidates[angle]
+                orientation_meta = {
+                    "orientation_angle": angle,
+                    "orientation_confidence": scores[angle][0],
+                    "orientation_classifier_confidence": classifier_confidence,
+                    "orientation_method": "recheck",
+                }
+                recheck_performed = True
+        orientation_meta["orientation_recheck"] = recheck_performed
 
         use_role = cfg.role_classifier if role_classifier is None else role_classifier
         if use_role:
@@ -275,10 +529,14 @@ class PageProcessor:
                 self._role = RoleClassifier(str(_models.resolve(cfg.role_model)),
                                             device=self._device, threads=cfg.ocr_threads,
                                             cpu_mem_arena=cfg.cpu_mem_arena)
-            self._role.classify_blocks(blocks, img_bgr)
+            self._role.classify_blocks(blocks, upright)
+
+        if angle:
+            _add_space_boxes(blocks)
+            blocks = _map_blocks_back(blocks, img_w, img_h, angle)
 
         return (img_h, img_w, blocks, float(chosen["mean_conf"]),
-                chosen.get("img_scale"))
+                chosen.get("img_scale"), orientation_meta)
 
     def _detect_language(self, text: str) -> Optional[str]:
         if self._lang is None:
@@ -292,9 +550,20 @@ class PageProcessor:
                 source_identifier: Optional[str] = None,
                 profile: Optional[str] = None,
                 dpi: Optional[int] = None,
-                physical_img_nr: Optional[int] = None):
-        img_h, img_w, blocks, mean_conf, img_scale = self._run(
-            img_bgr, height_scale=height_scale, role_classifier=role_classifier)
+                physical_img_nr: Optional[int] = None,
+                orientation: Optional[str] = None,
+                orientation_threshold: Optional[float] = None,
+                orientation_probe: Optional[str] = None,
+                contrast: Optional[str] = None,
+                _orientation_image: Optional[np.ndarray] = None):
+        img_h, img_w, blocks, mean_conf, img_scale, orientation_meta = self._run(
+            img_bgr, height_scale=height_scale, role_classifier=role_classifier,
+            orientation=orientation,
+            orientation_threshold=orientation_threshold,
+            orientation_probe=orientation_probe,
+            contrast=contrast,
+            orientation_image=_orientation_image,
+        )
         cfg = self.config
         text = _blocks_to_text(blocks)
         profile = profile or cfg.alto_profile
@@ -335,20 +604,42 @@ class PageProcessor:
             content = build_alto(page_id, img_h, img_w, blocks, **alto_kwargs)
         if with_meta:
             n_lines = sum(len(b["lines"]) for b in blocks)
-            return content, {"mean_conf": round(mean_conf, 4), "n_lines": n_lines}
+            return content, {
+                "mean_conf": round(mean_conf, 4),
+                "n_lines": n_lines,
+                **orientation_meta,
+            }
         return content
 
     def process_file(self, image_path: str | Path, out_path: str | Path | None = None,
                      fmt: str = "alto", source_identifier: str | None = None,
-                     physical_img_nr: int | None = None):
+                     physical_img_nr: int | None = None,
+                     with_meta: bool = False,
+                     orientation: Optional[str] = None,
+                     orientation_threshold: Optional[float] = None,
+                     orientation_probe: Optional[str] = None,
+                     contrast: Optional[str] = None):
         img_path = Path(image_path)
         img = decode_image_path(img_path)
+        orientation_mode = orientation if orientation is not None else self.config.orientation
+        orientation_image = (decode_gray_image_path(img_path)
+                             if orientation_mode == "auto" else None)
 
         result = self.process(img, page_id=img_path.stem, fmt=fmt,
+                              with_meta=with_meta,
                               source_file=img_path.name,
                               source_identifier=source_identifier,
                               dpi=read_image_dpi(img_path),
-                              physical_img_nr=physical_img_nr)
+                              physical_img_nr=physical_img_nr,
+                              orientation=orientation,
+                              orientation_threshold=orientation_threshold,
+                              orientation_probe=orientation_probe,
+                              contrast=contrast,
+                              _orientation_image=orientation_image)
+
+        metadata = None
+        if with_meta:
+            result, metadata = result
 
         if out_path is not None:
             if isinstance(result, dict):
@@ -359,7 +650,7 @@ class PageProcessor:
             else:
                 Path(out_path).write_text(result, encoding="utf-8")
 
-        return result
+        return (result, metadata) if with_meta else result
 
 
 def _strip_multi_suffix(p: Path) -> str:

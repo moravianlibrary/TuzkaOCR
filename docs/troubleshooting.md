@@ -28,6 +28,15 @@
     3. **Try `--height-scale 1.5`** if crops clip ascenders or descenders.
     4. **Check the scan.** Below roughly 200 dpi, no setting recovers the page.
 
+??? failure "A scan is sideways or upside down"
+    Pass `--orientation auto` (`TUZKAOCR_ORIENTATION=auto`). If upside-down pages still slip
+    through, also set `TUZKAOCR_ORIENTATION_RECHECK=on` — see
+    [page orientation](configuration.md#page-orientation).
+
+??? failure "Pale carbon copies or faint typewriter text are hard to read"
+    Try `--contrast auto` (`TUZKAOCR_CONTRAST=auto`) — see
+    [contrast normalisation](configuration.md#contrast-normalisation).
+
 ??? failure "Columns or articles are read in the wrong order"
     Try `TUZKAOCR_READING_ORDER=basic` (CLI `--reading-order basic`) — see
     [reading order](configuration.md#reading-order).

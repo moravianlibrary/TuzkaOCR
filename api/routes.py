@@ -12,7 +12,12 @@ from fastapi.responses import PlainTextResponse
 from fastapi.security.api_key import APIKeyHeader
 
 from tuzkaocr import _models
-from tuzkaocr.images import ImageDecodeError, decode_image_path, read_image_dpi
+from tuzkaocr.images import (
+    ImageDecodeError,
+    decode_gray_image_path,
+    decode_image_path,
+    read_image_dpi,
+)
 from tuzkaocr.jobs import JobInputError, JobStoreFull
 
 ALLOWED_DOMAINS = {"kramarky", "handwritten", "kurrent"}
@@ -113,6 +118,36 @@ def _validate_alto_profile(profile: Optional[str]) -> Optional[str]:
     return profile
 
 
+def _validate_orientation(value: Optional[str]) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    if value not in ("off", "auto"):
+        raise HTTPException(status_code=400, detail="orientation must be 'off' or 'auto'")
+    return value
+
+
+def _validate_orientation_threshold(value: Optional[float]) -> Optional[float]:
+    if value is None:
+        return None
+    if not 0.0 <= value <= 1.0:
+        raise HTTPException(
+            status_code=400,
+            detail=f"orientation_threshold must be in [0, 1], got {value}",
+        )
+    return value
+
+
+def _validate_contrast(value: Optional[str]) -> Optional[str]:
+    if value in (None, ""):
+        return None
+    if value not in ("off", "on", "auto", "line"):
+        raise HTTPException(
+            status_code=400,
+            detail="contrast must be 'off', 'on', 'auto' or 'line'",
+        )
+    return value
+
+
 def _validate_physical_img_nr(value: Optional[int]) -> Optional[int]:
     if value is None:
         return None
@@ -181,11 +216,17 @@ def _submit(request: Request, spool_path: Path, page_id: str,
             role_classifier: Optional[bool] = None,
             source_identifier: Optional[str] = None,
             alto_profile: Optional[str] = None,
-            physical_img_nr: Optional[int] = None) -> str:
+            physical_img_nr: Optional[int] = None,
+            orientation: Optional[str] = None,
+            orientation_threshold: Optional[float] = None,
+            contrast: Optional[str] = None) -> str:
     domain = _validate_domain(domain)
     fmt = _validate_fmt(fmt)
     alto_profile = _validate_alto_profile(alto_profile)
     physical_img_nr = _validate_physical_img_nr(physical_img_nr)
+    orientation = _validate_orientation(orientation)
+    orientation_threshold = _validate_orientation_threshold(orientation_threshold)
+    contrast = _validate_contrast(contrast)
     cache = request.app.state.cache
     store = request.app.state.store
     max_image_pixels = request.app.state.config.max_image_pixels
@@ -197,6 +238,11 @@ def _submit(request: Request, spool_path: Path, page_id: str,
     def work():
         try:
             img = decode_image_path(spool_path, max_image_pixels)
+            orientation_image = (
+                decode_gray_image_path(spool_path)
+                if (orientation or request.app.state.config.orientation) == "auto"
+                else None
+            )
         except ImageDecodeError as exc:
             raise JobInputError(str(exc)) from exc
         return processor.process(img, page_id=page_id, fmt=fmt,
@@ -205,7 +251,11 @@ def _submit(request: Request, spool_path: Path, page_id: str,
                                  source_identifier=source_identifier,
                                  profile=alto_profile,
                                  dpi=read_image_dpi(spool_path),
-                                 physical_img_nr=physical_img_nr)
+                                 physical_img_nr=physical_img_nr,
+                                 orientation=orientation,
+                                 orientation_threshold=orientation_threshold,
+                                 contrast=contrast,
+                                 _orientation_image=orientation_image)
 
     result_ext = {"txt": ".txt", "page": ".page.xml"}.get(fmt, ".xml")
     try:
@@ -232,6 +282,15 @@ async def list_models(request: Request, caller_name: Optional[str] = Depends(_re
             "ocr_model":    cfg.ocr_model,
             "layout_model": cfg.layout_model,
             "height_scale": cfg.height_scale,
+            "orientation": cfg.orientation,
+            "orientation_model": cfg.orientation_model,
+            "orientation_threshold": cfg.orientation_threshold,
+            "orientation_probe": cfg.orientation_probe,
+            "orientation_recheck": cfg.orientation_recheck,
+            "orientation_recheck_conf": cfg.orientation_recheck_conf,
+            "orientation_recheck_chars": cfg.orientation_recheck_chars,
+            "contrast": cfg.contrast,
+            "contrast_ink": cfg.contrast_ink,
         },
         "kramarky": {
             "ocr_model":    cfg.kramarky_ocr_model,
@@ -248,6 +307,7 @@ async def list_models(request: Request, caller_name: Optional[str] = Depends(_re
         "available": {
             "ocr_models":    [f for f in onnx_files if "rec-" in f and ".style." not in f],
             "layout_models": [f for f in onnx_files if "dec-" in f],
+            "orientation_models": [f for f in onnx_files if f.startswith("orient-")],
         },
         "selectable_via_domain": ["default"] + sorted(ALLOWED_DOMAINS),
     }
@@ -268,7 +328,10 @@ async def _ingest_upload(request: Request, upload: UploadFile,
                          caller_name: Optional[str],
                          source_identifier: Optional[str] = None,
                          alto_profile: Optional[str] = None,
-                         physical_img_nr: Optional[int] = None) -> str:
+                         physical_img_nr: Optional[int] = None,
+                         orientation: Optional[str] = None,
+                         orientation_threshold: Optional[float] = None,
+                         contrast: Optional[str] = None) -> str:
     _reject_if_full(request)
     cfg = request.app.state.config
     spool_path = await _read_upload(upload, cfg.spool_dir)
@@ -285,6 +348,9 @@ async def _ingest_upload(request: Request, upload: UploadFile,
             source_identifier=source_identifier,
             alto_profile=alto_profile,
             physical_img_nr=physical_img_nr,
+            orientation=orientation,
+            orientation_threshold=orientation_threshold,
+            contrast=contrast,
         )
         submitted = True
         return job_id
@@ -303,13 +369,19 @@ async def process_image(
     source_identifier: Optional[str] = Form(None),
     alto_profile: Optional[str] = Form(None),
     physical_img_nr: Optional[int] = Form(None),
+    orientation: Optional[str] = Form(None),
+    orientation_threshold: Optional[float] = Form(None),
+    contrast: Optional[str] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
     job_id = await _ingest_upload(request, image, domain, fmt,
                                   role_classifier, caller_name,
                                   source_identifier=source_identifier,
                                   alto_profile=alto_profile,
-                                  physical_img_nr=physical_img_nr)
+                                  physical_img_nr=physical_img_nr,
+                                  orientation=orientation,
+                                  orientation_threshold=orientation_threshold,
+                                  contrast=contrast)
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -327,6 +399,10 @@ async def get_status(job_id: str, request: Request, caller_name: Optional[str] =
         "finished_at": job.finished_at.isoformat() if job.finished_at else None,
         "mean_conf":   job.mean_conf,
         "n_lines":     job.n_lines,
+        "orientation_angle": job.orientation_angle,
+        "orientation_confidence": job.orientation_confidence,
+        "orientation_classifier_confidence": job.orientation_classifier_confidence,
+        "orientation_method": job.orientation_method,
         "error":       job.error,
     }
 
@@ -370,13 +446,19 @@ async def upload_legacy(
     source_identifier: Optional[str] = Form(None),
     alto_profile: Optional[str] = Form(None),
     physical_img_nr: Optional[int] = Form(None),
+    orientation: Optional[str] = Form(None),
+    orientation_threshold: Optional[float] = Form(None),
+    contrast: Optional[str] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
     job_id = await _ingest_upload(request, file, domain, fmt,
                                   role_classifier, caller_name,
                                   source_identifier=source_identifier,
                                   alto_profile=alto_profile,
-                                  physical_img_nr=physical_img_nr)
+                                  physical_img_nr=physical_img_nr,
+                                  orientation=orientation,
+                                  orientation_threshold=orientation_threshold,
+                                  contrast=contrast)
     return {"id": job_id}
 
 
@@ -391,6 +473,10 @@ async def status_legacy(job_id: str, request: Request, caller_name: Optional[str
         "state": "success" if job.status == "done" else job.status,
         "mean_conf": job.mean_conf,
         "n_lines":   job.n_lines,
+        "orientation_angle": job.orientation_angle,
+        "orientation_confidence": job.orientation_confidence,
+        "orientation_classifier_confidence": job.orientation_classifier_confidence,
+        "orientation_method": job.orientation_method,
         "error": job.error or "",
     }
 

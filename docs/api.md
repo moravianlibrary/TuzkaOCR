@@ -47,6 +47,9 @@ Legacy-compatible aliases exist for older clients — see [below](#legacy-endpoi
 | `fmt` | string | `alto` | `alto`, `page`, `txt`, `multi` |
 | `role_classifier` | bool | server default | `true` / `false` |
 | `alto_profile` | string | server default (`ndk`) | `ndk`, `basic` |
+| `orientation` | string | server default (`off`) | `off`, `auto` |
+| `orientation_threshold` | float | server default (`0.9`) | 0–1 |
+| `contrast` | string | server default (`off`) | `off`, `on`, `auto`, `line` |
 | `source_identifier` | string | *none* | Written into the ALTO as `fileIdentifier` |
 | `physical_img_nr` | int | *from the filename* | Sequential page number within the volume; must be >=1 |
 
@@ -59,6 +62,8 @@ curl -F "image=@page.jpg" http://localhost:8000/api/v1/process
 ```
 
 Invalid values are rejected with **400** before the job is created.
+
+`orientation` and `contrast` are explained in [Configuration](configuration.md#page-orientation).
 
 ## Polling and downloading
 
@@ -78,12 +83,17 @@ curl -s "http://localhost:8000/api/v1/status/$JOB"
   "finished_at": "2026-08-31T09:14:04.902733+00:00",
   "mean_conf": 0.9421,
   "n_lines": 37,
+  "orientation_angle": 0,
+  "orientation_confidence": null,
+  "orientation_classifier_confidence": null,
+  "orientation_method": "off",
   "error": null
 }
 ```
 
 `status` is `queued`, `running`, `done`, or `failed`. A low `mean_conf` flags pages worth
-checking.
+checking. The `orientation_*` fields report the rotation applied to make the page upright
+and how it was chosen (`off`, `classifier`, `probe` or `recheck`).
 
 ```bash
 curl -o result.txt "http://localhost:8000/api/v1/result/$JOB"
@@ -136,7 +146,7 @@ serves files that remain on disk.
 ## Authentication
 
 Off by default, which is only safe on a trusted network. Two modes, both using the
-`X-API-Key` header.
+`X-API-Key` header. For Docker, see [Setting an API key](docker.md#setting-an-api-key).
 
 === "Single shared key"
 
@@ -183,7 +193,7 @@ curl -s http://localhost:8000/api/v1/models
 
 ```json
 {
-  "defaults":    {"ocr_model": "rec-E-v5.onnx",  "layout_model": "dec-B-v2.onnx", "height_scale": 1.0},
+  "defaults":    {"ocr_model": "rec-E-v7.onnx",  "layout_model": "dec-B-v2.onnx", "height_scale": 1.0},
   "kramarky":    {"ocr_model": "rec-E-v4k7.onnx", "layout_model": "dec-B-v1k.onnx"},
   "handwritten": {"ocr_model": "rec-I-v2.onnx",  "layout_model": "dec-B-v2h.onnx"},
   "kurrent":     {"ocr_model": "rec-I-v2.onnx",  "layout_model": "dec-B-v2h.onnx"},

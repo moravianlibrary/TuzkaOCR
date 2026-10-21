@@ -32,8 +32,18 @@ def _env(key: str, default):
 @dataclass
 class Config:
     layout_model: str = field(default_factory=lambda: _env("LAYOUT_MODEL", "dec-B-v2.onnx"))
-    ocr_model:    str = field(default_factory=lambda: _env("OCR_MODEL",    "rec-E-v5.onnx"))
+    ocr_model:    str = field(default_factory=lambda: _env("OCR_MODEL",    "rec-E-v7.onnx"))
     vocab:        str = field(default_factory=lambda: _env("VOCAB",        "vocab.json"))
+
+    orientation: str = field(default_factory=lambda: _env("ORIENTATION", "off"))
+    orientation_model: str = field(default_factory=lambda: _env("ORIENTATION_MODEL", "orient-A.onnx"))
+    orientation_threshold: float = field(default_factory=lambda: _env("ORIENTATION_THRESHOLD", 0.9))
+    orientation_probe: str = field(default_factory=lambda: _env("ORIENTATION_PROBE", "on"))
+    orientation_recheck: str = field(default_factory=lambda: _env("ORIENTATION_RECHECK", "off"))
+    orientation_recheck_conf: float = field(default_factory=lambda: _env("ORIENTATION_RECHECK_CONF", 0.80))
+    orientation_recheck_chars: int = field(default_factory=lambda: _env("ORIENTATION_RECHECK_CHARS", 200))
+    contrast: str = field(default_factory=lambda: _env("CONTRAST", "off"))
+    contrast_ink: int = field(default_factory=lambda: _env("CONTRAST_INK", 120))
 
     kramarky_layout_model: str = field(default_factory=lambda: _env("KRAMARKY_LAYOUT_MODEL", "dec-B-v1k.onnx"))
     kramarky_ocr_model:    str = field(default_factory=lambda: _env("KRAMARKY_OCR_MODEL",    "rec-E-v4k7.onnx"))
@@ -105,6 +115,8 @@ class Config:
         _pos_int("max_upload_mb",     self.max_upload_mb)
         _pos_int("max_image_pixels",  self.max_image_pixels)
         _pos_int("max_job_age_hours", self.max_job_age_hours)
+        _pos_int("orientation_recheck_chars", self.orientation_recheck_chars)
+        _pos_int("contrast_ink", self.contrast_ink, allow_zero=True)
 
         if self.device not in self._ALLOWED_DEVICES:
             errors.append(
@@ -127,6 +139,30 @@ class Config:
                 f"TUZKAOCR_READING_ORDER must be one of {self._ALLOWED_READING_ORDERS}, "
                 f"got {self.reading_order!r}"
             )
+
+        if self.orientation not in ("off", "auto"):
+            errors.append("TUZKAOCR_ORIENTATION must be 'off' or 'auto', "
+                          f"got {self.orientation!r}")
+
+        if self.orientation_probe not in ("on", "off"):
+            errors.append("TUZKAOCR_ORIENTATION_PROBE must be 'on' or 'off', "
+                          f"got {self.orientation_probe!r}")
+
+        if self.orientation_recheck not in ("on", "off"):
+            errors.append("TUZKAOCR_ORIENTATION_RECHECK must be 'on' or 'off', "
+                          f"got {self.orientation_recheck!r}")
+
+        if self.contrast not in ("off", "on", "auto", "line"):
+            errors.append("TUZKAOCR_CONTRAST must be 'off', 'on', 'auto' or 'line', "
+                          f"got {self.contrast!r}")
+
+        if not (0.0 <= self.orientation_threshold <= 1.0):
+            errors.append("TUZKAOCR_ORIENTATION_THRESHOLD must be in [0, 1], "
+                          f"got {self.orientation_threshold}")
+
+        if not (0.0 <= self.orientation_recheck_conf <= 1.0):
+            errors.append("TUZKAOCR_ORIENTATION_RECHECK_CONF must be in [0, 1], "
+                          f"got {self.orientation_recheck_conf}")
 
         if not (0.1 <= self.height_scale <= 10.0):
             errors.append(

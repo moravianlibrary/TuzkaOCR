@@ -9,8 +9,10 @@ This applies to the model and vocabulary artifacts in this directory,
 including but not limited to:
 
 - dec-B-v2.onnx
+- rec-E-v7.onnx
 - rec-E-v5.onnx
 - rec-E-v4k7.onnx
+- orient-A.onnx
 - rec-I-v2.onnx
 - rec-I-v2.style.onnx
 - role-H5.onnx

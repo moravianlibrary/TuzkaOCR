@@ -60,9 +60,37 @@ near `PAGE_WORKERS × LINE_WORKERS × OCR_THREADS`, so do not oversubscribe a sm
 | `TUZKAOCR_LARGE_TEXT` | `true` | Extra layout pass for text far larger than the body text, such as newspaper mastheads; see [large text](#large-text) |
 | `TUZKAOCR_CROP_ENDPOINT_EXT` | `0.0` | Extend line crops at both ends, as a fraction of line height |
 | `TUZKAOCR_COLUMN_SPLIT` | `false` | Order lines column-by-column within a region |
+| `TUZKAOCR_CONTRAST` | `off` | `off`, `on`, `auto` or `line`; see [contrast normalisation](#contrast-normalisation) |
+| `TUZKAOCR_CONTRAST_INK` | `120` | `auto` threshold |
+| `TUZKAOCR_ORIENTATION` | `off` | `off` or `auto`; see [page orientation](#page-orientation) |
+| `TUZKAOCR_ORIENTATION_MODEL` | `orient-A.onnx` | Orientation classifier |
+| `TUZKAOCR_ORIENTATION_THRESHOLD` | `0.9` | Below this classifier confidence, all four angles are tried |
+| `TUZKAOCR_ORIENTATION_PROBE` | `on` | `off` trusts the classifier alone |
+| `TUZKAOCR_ORIENTATION_RECHECK` | `off` | Retry other angles on low-confidence pages |
+| `TUZKAOCR_ORIENTATION_RECHECK_CONF` | `0.80` | Recheck below this mean character confidence |
+| `TUZKAOCR_ORIENTATION_RECHECK_CHARS` | `200` | Recheck only pages with at least this many characters |
 
 `CROP_ENDPOINT_EXT` and `COLUMN_SPLIT` are set by the domain (`0.3` and `true` for
 `handwritten` and `kurrent`), so the environment value only affects printed pages.
+
+### Contrast normalisation
+
+Helps with pale carbon copies and faint typewriting. Normalisation stretches the darkest ink
+to black and the paper to white. `on` does this for every page, `auto` only for pages whose
+darkest ink is lighter than `TUZKAOCR_CONTRAST_INK`, and `line` for each line crop. Off by
+default; coordinates are not affected.
+
+### Page orientation
+
+Off by default. With `TUZKAOCR_ORIENTATION=auto`, a small classifier guesses whether a page
+is turned by 90°, 180° or 270°. A page is only rotated if OCR at that angle is clearly more
+confident than upright; when the classifier is unsure, all four angles are tried. Upright
+pages the classifier is sure about need no extra OCR pass.
+
+`TUZKAOCR_ORIENTATION_RECHECK=on` also retries the other angles on pages that came out with
+low confidence. It catches some upside-down pages the classifier missed, at the cost of
+extra OCR passes. Output coordinates stay in the original image; see
+[output formats](output-formats.md#page-orientation).
 
 ### Adaptive downsampling
 
@@ -158,7 +186,7 @@ in [HTTP API](api.md#authentication).
 | Variable | Default |
 |---|---|
 | `TUZKAOCR_LAYOUT_MODEL` | `dec-B-v2.onnx` |
-| `TUZKAOCR_OCR_MODEL` | `rec-E-v5.onnx` |
+| `TUZKAOCR_OCR_MODEL` | `rec-E-v7.onnx` |
 | `TUZKAOCR_KRAMARKY_LAYOUT_MODEL` | `dec-B-v1k.onnx` |
 | `TUZKAOCR_KRAMARKY_OCR_MODEL` | `rec-E-v4k7.onnx` |
 | `TUZKAOCR_HANDWRITTEN_LAYOUT_MODEL` | `dec-B-v2h.onnx` |

@@ -7,10 +7,15 @@ clients choose a domain, never a model file.
 
 | Domain | Material | Layout | Recognition |
 |---|---|---|---|
-| `default` (also `print`) | Printed books and general scans | `dec-B-v2` | `rec-E-v5` |
+| `default` (also `print`) | Printed books and general scans | `dec-B-v2` | `rec-E-v7` |
 | `kramarky` | Kramarky broadsheet prints | `dec-B-v1k` | `rec-E-v4k7` |
 | `handwritten` | Czech handwriting | `dec-B-v2h` | `rec-I-v2` |
 | `kurrent` | German Kurrent / Sütterlin script | `dec-B-v2h` | `rec-I-v2` |
+
+Compared with `rec-E-v5`, `rec-E-v7` reads large display type, dark or coloured paper, faint
+typewriting, carbon copies, dot-matrix print and one-line formulas better, and mostly
+ignores ornaments and rules. It adds the Slovak letters `ľ ĺ ŕ ô` and common Greek
+letters and symbols. `rec-E-v5` remains available by name.
 
 `rec-I-v2` adapts to each writer: a small style model reads the whole page first, then each
 line is recognized with that page style. Keep `rec-I-v2.onnx` and `rec-I-v2.style.onnx` in
@@ -31,13 +36,15 @@ Model files are installed as package data, so nothing is downloaded at first run
 | `dec-B-v2.onnx` | 10.6 MB | Layout, printed |
 | `dec-B-v1k.onnx` | 10.6 MB | Layout, kramarky |
 | `dec-B-v2h.onnx` | 10.6 MB | Layout, handwritten and Kurrent |
-| `rec-E-v5.onnx` | 3.2 MB | Recognition, printed |
+| `rec-E-v7.onnx` | 3.2 MB | Recognition, printed |
+| `rec-E-v5.onnx` | 3.2 MB | Older printed recognizer, selectable by name |
 | `rec-E-v4k7.onnx` | 3.2 MB | Recognition, kramarky |
 | `rec-I-v2.onnx` | 12.6 MB | Recognition, handwritten and Kurrent |
 | `rec-I-v2.style.onnx` | 0.3 MB | Page style, used with `rec-I-v2.onnx` |
 | `rec-H-v6.onnx` | 12.4 MB | Older handwritten recognizer, selectable by name |
 | `role-H5.onnx` | 1.1 MB | Line role classifier |
-| `vocab.json` | 1.2 KB | Shared, append-only recognizer vocabulary with 203 characters |
+| `orient-A.onnx` | 1.2 MB | Page orientation |
+| `vocab.json` | 1.4 KB | Shared, append-only recognizer vocabulary with 233 characters |
 | `lang-A-v1.npz` | 45 KB | Language identification for ALTO `LANG` |
 
 ## Language identification

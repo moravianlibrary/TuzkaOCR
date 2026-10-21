@@ -18,6 +18,24 @@ curl http://localhost:8000/healthz
 Tags: an exact version (`1.9.0`), the latest patch of a minor version (`1.9`), and
 `latest`. Pin an exact version in production.
 
+### Setting an API key
+
+Authentication is off by default. To turn it on, pass a key to the container:
+
+```bash
+KEY=$(python3 -c "import secrets; print(secrets.token_urlsafe(32))")
+echo "$KEY"
+
+docker run -d -p 8000:8000 \
+  -e TUZKAOCR_API_KEY="$KEY" \
+  ghcr.io/moravianlibrary/tuzkaocr:1.9.0
+
+curl -H "X-API-Key: $KEY" http://localhost:8000/api/v1/models
+```
+
+Every request except `/healthz` must then send the key in the `X-API-Key` header. For one
+key per caller, see [HTTP API](api.md#authentication).
+
 ## CPU service with Compose
 
 From a clone of the repository, Compose adds the results directory, the spool volume,
@@ -94,8 +112,9 @@ Results land in `./results` on the host.
 
 - Health checks hit `/healthz`; shutdown waits up to 120 s for in-flight pages.
 - Terminate TLS at a reverse proxy; the app speaks plain HTTP.
-- Enable an API key for any non-local deployment. For per-caller keys, mount the file and
-  set `TUZKAOCR_API_KEYS_FILE`:
+- Enable an API key for any non-local deployment (see
+  [Setting an API key](#setting-an-api-key)). With Compose, set `TUZKAOCR_API_KEY` in
+  `tuzkaocr.env`, or for per-caller keys mount the file and set `TUZKAOCR_API_KEYS_FILE`:
 
     ```yaml
     volumes:

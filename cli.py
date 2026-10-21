@@ -17,14 +17,25 @@ def _init_worker(cfg_kwargs: dict) -> None:
     _pool_processor = PageProcessor(Config(**cfg_kwargs))
 
 
-def _process_one(args_tuple) -> tuple[str, float, str | None]:
+def _process_one(args_tuple) -> tuple[str, float, str | None, dict | None]:
     img_path, out_path, fmt = args_tuple
     t0 = time.time()
     try:
-        _pool_processor.process_file(img_path, out_path=out_path, fmt=fmt)
-        return str(img_path), time.time() - t0, None
+        _, metadata = _pool_processor.process_file(
+            img_path, out_path=out_path, fmt=fmt, with_meta=True,
+        )
+        return str(img_path), time.time() - t0, None, metadata
     except Exception as exc:
-        return str(img_path), time.time() - t0, str(exc)
+        return str(img_path), time.time() - t0, str(exc), None
+
+
+def _orientation_summary(metadata: dict) -> str:
+    confidence = metadata.get("orientation_confidence")
+    confidence_text = "n/a" if confidence is None else f"{confidence:.3f}"
+    recheck_text = " recheck" if metadata.get("orientation_recheck") else ""
+    return (f"orientation={metadata['orientation_angle']}° "
+            f"confidence={confidence_text} method={metadata['orientation_method']}"
+            f"{recheck_text}")
 
 
 def main() -> None:
@@ -94,6 +105,14 @@ def main() -> None:
     p.add_argument("--physical-img-nr", type=int, default=None,
                    help="Sequential page number within the volume; taken from a trailing "
                         "number in the filename when not given (single image only)")
+    p.add_argument("--orientation", choices=["off", "auto"], default=None,
+                   help="Page orientation handling; default TUZKAOCR_ORIENTATION or off")
+    p.add_argument("--orientation-threshold", type=float, default=None,
+                   help="Minimum classifier probability before using its angle directly")
+    p.add_argument("--orientation-probe", choices=["on", "off"], default=None,
+                   help="Use OCR confidence probing when the classifier is below threshold")
+    p.add_argument("--contrast", choices=["off", "on", "auto", "line"], default=None,
+                   help="Normalize grayscale contrast per page or recognizer crop")
     p.add_argument("--ndk-warn", action="store_true",
                    help="Report NDK profile fields that could not be filled from the input "
                         "or the configuration")
@@ -137,6 +156,11 @@ def main() -> None:
         crop_endpoint_ext = (0.3 if args.domain in ("handwritten", "kurrent") else 0.0),
         column_split = args.domain in ("handwritten", "kurrent"),
         alto_profile = args.alto_profile or _base.alto_profile,
+        orientation = args.orientation or _base.orientation,
+        orientation_threshold = (args.orientation_threshold if args.orientation_threshold is not None
+                                 else _base.orientation_threshold),
+        orientation_probe = args.orientation_probe or _base.orientation_probe,
+        contrast = args.contrast or _base.contrast,
         alto_lang = args.alto_lang if args.alto_lang is not None else _base.alto_lang,
         alto_agency = args.alto_agency if args.alto_agency is not None else _base.alto_agency,
         alto_dpi = args.alto_dpi if args.alto_dpi is not None else _base.alto_dpi,
@@ -170,25 +194,31 @@ def main() -> None:
                   "1 — pass --physical-img-nr to record the page's place in the volume",
                   file=sys.stderr, flush=True)
 
-        result = processor.process_file(img_path, out_path=out_path, fmt=args.format,
-                                        source_identifier=args.source_identifier,
-                                        physical_img_nr=args.physical_img_nr)
+        result, metadata = processor.process_file(
+            img_path, out_path=out_path, fmt=args.format, with_meta=True,
+            source_identifier=args.source_identifier,
+            physical_img_nr=args.physical_img_nr,
+        )
         elapsed = time.time() - t0
 
         if args.format == "multi":
             n_lines = result["txt"].count("\n")
             n_strings = result["alto"].count("<String ")
             print(f"Done in {elapsed:.1f}s — {n_strings} words, {n_lines} lines → "
-                  f"{out_path}.alto.xml, {out_path}.txt", flush=True)
+                  f"{out_path}.alto.xml, {out_path}.txt; "
+                  f"{_orientation_summary(metadata)}", flush=True)
         elif args.format == "page":
             n_words = result.count("<Word ")
-            print(f"Done in {elapsed:.1f}s — {n_words} words → {out_path}", flush=True)
+            print(f"Done in {elapsed:.1f}s — {n_words} words → {out_path}; "
+                  f"{_orientation_summary(metadata)}", flush=True)
         elif args.format == "txt":
             n_lines = result.count("\n")
-            print(f"Done in {elapsed:.1f}s — {n_lines} lines → {out_path}", flush=True)
+            print(f"Done in {elapsed:.1f}s — {n_lines} lines → {out_path}; "
+                  f"{_orientation_summary(metadata)}", flush=True)
         else:
             n_strings = result.count("<String ")
-            print(f"Done in {elapsed:.1f}s — {n_strings} words → {out_path}", flush=True)
+            print(f"Done in {elapsed:.1f}s — {n_strings} words → {out_path}; "
+                  f"{_orientation_summary(metadata)}", flush=True)
 
     else:
         in_dir  = Path(args.input)
@@ -228,7 +258,7 @@ def main() -> None:
         ) as pool:
             futures = {pool.submit(_process_one, t): t[0] for t in tasks}
             for future in as_completed(futures):
-                img_path, elapsed, err = future.result()
+                img_path, elapsed, err, metadata = future.result()
                 done += 1
                 if err:
                     errors += 1
@@ -237,7 +267,8 @@ def main() -> None:
                 else:
                     eta = (time.time() - t0) / done * (len(images) - done)
                     print(f"[{done:4d}/{len(images)}] {Path(img_path).name} "
-                          f"{elapsed:.1f}s  ETA {eta/60:.1f}m", flush=True)
+                          f"{elapsed:.1f}s  ETA {eta/60:.1f}m  "
+                          f"{_orientation_summary(metadata)}", flush=True)
 
         total = time.time() - t0
         print(f"\nDone: {done - errors}/{len(images)} OK, {errors} errors, "

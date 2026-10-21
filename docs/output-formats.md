@@ -15,6 +15,13 @@ Hyphenated words keep their hyphen and line break.
 [ALTO](https://www.loc.gov/standards/alto/) 4, declaring schema version 4.4. All coordinates
 are in **pixels** of the source image and every rectangle is clipped to the page bounds.
 
+### Page orientation
+
+With [orientation](configuration.md#page-orientation) enabled, coordinates stay in the
+source image and text on a rotated page is in upright reading order. Its `TextBlock`
+elements carry the standard `ROTATION` attribute, counter-clockwise in degrees: a page
+scanned turned 90° clockwise gives `ROTATION="270"`.
+
 ### Profiles
 
 Selected with `--alto-profile` (CLI), the `alto_profile` form field (API), or
@@ -117,7 +124,7 @@ name:
     <softwareCreator>tuzkaocr</softwareCreator>
     <softwareName>TuzkaOCR</softwareName>
     <softwareVersion>1.9.0</softwareVersion>
-    <applicationDescription>recognition model rec-E-v5</applicationDescription>
+    <applicationDescription>recognition model rec-E-v7</applicationDescription>
   </processingSoftware>
 </Processing>
 ```
@@ -208,7 +215,7 @@ These NDK requirements are not produced by TuzkaOCR:
   is only an illustration gets an empty `PrintSpace`.
 - **`FONTSTYLE`** — bold, italic and small caps are not detected.
 - **`ALTERNATIVE`** — no alternative readings are produced.
-- **`ROTATION`, `POSITION`, `QUALITY` on `Page`** — not detected.
+- **`ROTATION`, `POSITION`, `QUALITY` on `Page`** — not detected (rotation goes on `TextBlock`).
 - **`StructureTag/@TYPE`** — line roles have no controlled vocabulary; only `ID` and `LABEL`
   are written.
 - **`TextBlock` in `LeftMargin` / `RightMargin`** — marginalia stay in the print space.

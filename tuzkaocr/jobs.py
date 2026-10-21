@@ -25,6 +25,10 @@ class Job:
     error_status: int = 500
     mean_conf: Optional[float] = None
     n_lines: Optional[int] = None
+    orientation_angle: Optional[int] = None
+    orientation_confidence: Optional[float] = None
+    orientation_classifier_confidence: Optional[float] = None
+    orientation_method: Optional[str] = None
     cleanup_fn: Optional[Callable[[], None]] = field(default=None, repr=False, compare=False)
 
 
@@ -103,6 +107,12 @@ class JobStore:
                 job.result_paths = paths or []
                 job.mean_conf = (meta or {}).get("mean_conf")
                 job.n_lines = (meta or {}).get("n_lines")
+                job.orientation_angle = (meta or {}).get("orientation_angle")
+                job.orientation_confidence = (meta or {}).get("orientation_confidence")
+                job.orientation_classifier_confidence = (
+                    (meta or {}).get("orientation_classifier_confidence")
+                )
+                job.orientation_method = (meta or {}).get("orientation_method")
             else:
                 job.error = error
                 job.error_status = error_status

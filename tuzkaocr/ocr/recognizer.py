@@ -184,11 +184,11 @@ class PageStyleRecognizer(OnnxRecognizer):
                 "has_style": has_style,
             })[0]
             class_dim = output.shape[-1]
-        if int(class_dim) != len(self.chars) + 1:
+        if int(class_dim) > len(self.chars) + 1:
             vocab_name = str(vocab_path) if vocab_path is not None else "vocab.json"
             raise ValueError(
                 f"Model {model_path} has {int(class_dim)} output classes, but vocabulary "
-                f"{vocab_name} has {len(self.chars)} characters and requires "
+                f"{vocab_name} has only {len(self.chars)} characters and covers "
                 f"{len(self.chars) + 1} classes including CTC blank."
             )
 

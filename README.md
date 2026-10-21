@@ -40,6 +40,9 @@ curl "http://localhost:8000/api/v1/status/$JOB"
 curl -o page.alto.xml "http://localhost:8000/api/v1/result/$JOB"
 ```
 
+Authentication is off by default; add `-e TUZKAOCR_API_KEY=<secret>` to `docker run` to
+require an `X-API-Key` header (see [Setting an API key](docs/docker.md#setting-an-api-key)).
+
 See [HTTP API](docs/api.md), [Docker](docs/docker.md) and
 [Configuration](docs/configuration.md).
 

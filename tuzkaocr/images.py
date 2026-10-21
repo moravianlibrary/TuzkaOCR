@@ -40,6 +40,13 @@ def decode_image_path(path: str | Path, max_pixels: int | None = None) -> np.nda
     return img
 
 
+def decode_gray_image_path(path: str | Path) -> np.ndarray:
+    img = cv2.imread(str(path), cv2.IMREAD_GRAYSCALE)
+    if img is None:
+        raise ImageDecodeError("Cannot decode image")
+    return img
+
+
 def _plausible(value: float | None, minimum: int = _MIN_DPI) -> int | None:
     if value is None or value <= 0:
         return None

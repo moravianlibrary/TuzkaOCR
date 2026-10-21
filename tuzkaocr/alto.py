@@ -74,6 +74,7 @@ class _Ids:
         self.ndk = ndk
         self.prefix = page_prefix
         self._tb = self._tl = self._st = self._sp = 0
+        self._cb = self._il = 0
 
     def block(self, bi: int) -> str:
         self._tb += 1
@@ -90,6 +91,14 @@ class _Ids:
     def space(self) -> str:
         self._sp += 1
         return f"{self.prefix}_SP{self._sp:04d}"
+
+    def composed_block(self) -> str:
+        self._cb += 1
+        return f"{self.prefix}_CB{self._cb:04d}"
+
+    def illustration(self) -> str:
+        self._il += 1
+        return f"{self.prefix}_IL{self._il:04d}"
 
 
 def _normalize_word(raw: object, page_w: int, page_h: int) -> dict:
@@ -130,6 +139,32 @@ def _block_role(lines: list) -> str | None:
 def _normalize_blocks(blocks: list, page_w: int, page_h: int) -> list[dict]:
     normalized = []
     for index, block in enumerate(blocks or []):
+        polygon = block.get("polygon")
+        clipped_polygon = (
+            [(min(max(int(x), 0), page_w), min(max(int(y), 0), page_h))
+             for x, y in polygon]
+            if polygon else None
+        )
+        if block.get("nontext_region"):
+            if all(block.get(key) is not None for key in ("hpos", "vpos", "width", "height")):
+                rect = (block["hpos"], block["vpos"], block["width"], block["height"])
+            elif clipped_polygon:
+                xs = [point[0] for point in clipped_polygon]
+                ys = [point[1] for point in clipped_polygon]
+                rect = (min(xs), min(ys), max(xs) - min(xs), max(ys) - min(ys))
+            else:
+                continue
+            hpos, vpos, width, height = _clip_rect(*rect, page_w, page_h)
+            normalized.append({
+                "index": index,
+                "lines": [],
+                "hpos": hpos, "vpos": vpos, "width": width, "height": height,
+                "role": None,
+                "polygon": clipped_polygon,
+                "rotation": None,
+                "nontext_region": True,
+            })
+            continue
         lines = []
         for line in block.get("lines") or []:
             words = [_normalize_word(word, page_w, page_h)
@@ -144,6 +179,11 @@ def _normalize_blocks(blocks: list, page_w: int, page_h: int) -> list[dict]:
                 "role": line.get("role"),
                 "conf": line.get("conf"),
                 "words": words,
+                "spaces": line.get("spaces"),
+                "style_hpos": line.get("style_hpos"),
+                "style_vpos": line.get("style_vpos"),
+                "style_width": line.get("style_width"),
+                "style_height": line.get("style_height"),
             })
         if not lines:
             continue
@@ -151,15 +191,15 @@ def _normalize_blocks(blocks: list, page_w: int, page_h: int) -> list[dict]:
         top = min(line["vpos"] for line in lines)
         right = max(line["hpos"] + line["width"] for line in lines)
         bottom = max(line["vpos"] + line["height"] for line in lines)
-        polygon = block.get("polygon")
         normalized.append({
             "index": index,
             "lines": lines,
             "hpos": left, "vpos": top,
             "width": max(1, right - left), "height": max(1, bottom - top),
             "role": _block_role(lines),
-            "polygon": [(min(max(int(x), 0), page_w), min(max(int(y), 0), page_h))
-                        for x, y in polygon] if polygon else None,
+            "polygon": clipped_polygon,
+            "rotation": block.get("rotation"),
+            "nontext_region": False,
         })
     return normalized
 
@@ -200,13 +240,17 @@ def _partition_page(blocks: list, page_w: int, page_h: int) -> tuple:
 
 
 def _line_pitch(block: dict) -> float | None:
-    tops = sorted(line["vpos"] for line in block["lines"])
+    tops = sorted(
+        line["style_vpos"] if line.get("style_vpos") is not None else line["vpos"]
+        for line in block["lines"]
+    )
     gaps = [later - earlier for earlier, later in zip(tops, tops[1:]) if later > earlier]
     return statistics.median(gaps) if gaps else None
 
 
 def _em_px(line: dict, pitch: float | None) -> float:
-    height = float(line["height"])
+    height = float(line["style_height"] if line.get("style_height") is not None
+                   else line["height"])
     return min(height, pitch) if pitch else height
 
 
@@ -220,8 +264,11 @@ def _font_bucket(em_px: float, dpi: int) -> int:
 
 def _align_of(block: dict) -> str:
     lines = block["lines"]
-    lefts = [line["hpos"] for line in lines]
-    rights = [line["hpos"] + line["width"] for line in lines]
+    lefts = [line["style_hpos"] if line.get("style_hpos") is not None else line["hpos"]
+             for line in lines]
+    rights = [left + (line["style_width"] if line.get("style_width") is not None
+                      else line["width"])
+              for left, line in zip(lefts, lines)]
     if len(lines) < 2:
         return "Left"
     tol = max(2.0, 0.02 * (max(rights) - min(lefts)))
@@ -400,6 +447,8 @@ def _emit_text_block(parent, block: dict, bi: int, ctx: dict) -> None:
     })
     if ndk and ctx["language"]:
         attrs["LANG"] = ctx["language"]
+    if block["rotation"] is not None:
+        attrs["ROTATION"] = str(block["rotation"])
     tb = ET.SubElement(parent, "TextBlock", attrs)
 
     if ndk and block["polygon"]:
@@ -433,13 +482,21 @@ def _emit_text_block(parent, block: dict, bi: int, ctx: dict) -> None:
             if not ndk:
                 ET.SubElement(tl, "SP")
                 continue
-            left = word["box"][0] + word["box"][2]
-            right = words[wi + 1]["box"][0]
+            spaces = line.get("spaces")
+            if spaces and wi < len(spaces):
+                left = int(spaces[wi]["hpos"])
+                top = int(spaces[wi]["vpos"])
+                width = int(spaces[wi]["width"])
+            else:
+                left = word["box"][0] + word["box"][2]
+                top = line["vpos"]
+                width = words[wi + 1]["box"][0] - left
             ET.SubElement(tl, "SP", {
                 "ID": ctx["ids"].space(),
                 "HPOS": str(min(max(left, 0), ctx["page_w"])),
-                "VPOS": str(line["vpos"]),
-                "WIDTH": str(max(0, right - left)),
+                "VPOS": str(min(max(top, 0), ctx["page_h"])),
+                "WIDTH": str(min(max(width, 0), ctx["page_w"] -
+                                  min(max(left, 0), ctx["page_w"]))),
             })
 
         if li in hyphens:
@@ -451,6 +508,22 @@ def _emit_text_block(parent, block: dict, bi: int, ctx: dict) -> None:
                     "WIDTH": str(hyp_box[2]),
                 })
             ET.SubElement(tl, "HYP", hyp_attrs)
+
+
+def _emit_illustration(parent, block: dict, ctx: dict) -> None:
+    rect = {
+        "HPOS": str(block["hpos"]), "VPOS": str(block["vpos"]),
+        "WIDTH": str(block["width"]), "HEIGHT": str(block["height"]),
+    }
+    composed_attrs = {"ID": ctx["ids"].composed_block(), "TYPE": "nontext", **rect}
+    composed = ET.SubElement(parent, "ComposedBlock", composed_attrs)
+    illustration_attrs = {"ID": ctx["ids"].illustration(), "TYPE": "nontext", **rect}
+    illustration = ET.SubElement(composed, "Illustration", illustration_attrs)
+    if block["polygon"]:
+        shape = ET.SubElement(illustration, "Shape")
+        ET.SubElement(shape, "Polygon", {
+            "POINTS": " ".join(f"{x},{y}" for x, y in block["polygon"])
+        })
 
 
 def _emit_pre_operation(parent, timestamp: str, agency: str | None,
@@ -561,7 +634,8 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
         _emit_ocr_processing(desc, "IdRecognition", "recognition", software_name, timestamp)
 
     normalized = _normalize_blocks(blocks, img_w, img_h)
-    styles = _collect_styles(normalized, dpi, font_family) if ndk else {}
+    text_blocks = [block for block in normalized if not block["nontext_region"]]
+    styles = _collect_styles(text_blocks, dpi, font_family) if ndk else {}
 
     if styles:
         styles_el = ET.SubElement(alto, "Styles")
@@ -571,7 +645,7 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
                 text_style["FONTFAMILY"] = _xml_safe(styles["family"])
             text_style["FONTSIZE"] = f"{styles['sizes'][bucket]:.1f}"
             ET.SubElement(styles_el, "TextStyle", text_style)
-        for align in sorted({styles["aligns"][id(block)] for block in normalized}):
+        for align in sorted({styles["aligns"][id(block)] for block in text_blocks}):
             ET.SubElement(styles_el, "ParagraphStyle", {
                 "ID": _ALIGN_STYLE_ID[align],
                 "ALIGN": align,
@@ -619,11 +693,15 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
         "language": language,
         "role_tag_id": role_tag_id,
         "page_w": img_w,
+        "page_h": img_h,
     }
 
     def emit_into(parent, members):
         for block in members:
-            _emit_text_block(parent, block, block["index"], ctx)
+            if block["nontext_region"]:
+                _emit_illustration(parent, block, ctx)
+            else:
+                _emit_text_block(parent, block, block["index"], ctx)
 
     if ndk:
         margins = (

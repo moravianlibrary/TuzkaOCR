@@ -159,10 +159,22 @@ None of these are needed for ordinary OCR. See [Configuration](configuration.md#
 | `--reading-order` | `columns` | Block order on printed pages: `columns` or `basic` |
 | `--no-large-text` | *large text on* | Skip the extra layout pass for mastheads and other very large text |
 | `--role-classifier` | off | Tag each line with a structural role in the ALTO output |
+| `--contrast` | `off` | `off`, `on`, `auto` or `line`; see [contrast normalisation](configuration.md#contrast-normalisation) |
 
 `--no-adaptive`, `--reading-order` and `--no-large-text` affect the printed domain only; see
 [Configuration](configuration.md#adaptive-downsampling). For roles see
 [Output formats](output-formats.md#line-roles).
+
+### Page orientation
+
+| Option | Default | Effect |
+|---|---|---|
+| `--orientation` | `off` | `auto` rotates sideways and upside-down pages upright |
+| `--orientation-threshold` | `0.9` | Below this classifier confidence, all four angles are tried |
+| `--orientation-probe` | `on` | `off` trusts the classifier alone |
+
+The CLI prints the chosen angle and method after each page. See
+[page orientation](configuration.md#page-orientation).
 
 ## Environment variables
 
