@@ -123,7 +123,7 @@ name:
   <processingSoftware>
     <softwareCreator>tuzkaocr</softwareCreator>
     <softwareName>TuzkaOCR</softwareName>
-    <softwareVersion>1.9.0</softwareVersion>
+    <softwareVersion>1.10.0</softwareVersion>
     <applicationDescription>recognition model rec-E-v7</applicationDescription>
   </processingSoftware>
 </Processing>
@@ -132,7 +132,7 @@ name:
 `processingAgency` is written only when `TUZKAOCR_ALTO_AGENCY` is set. The `basic` profile
 writes two `OCRProcessing` elements instead. For output processed with a custom pack,
 `softwareVersion` includes the pack name and version as build metadata, for example
-`1.9.0+sk-theses.1.0`, and `applicationDescription` also records `domain sk-theses 1.0.0`.
+`1.10.0+sk-theses.1.0`, and `applicationDescription` also records `domain sk-theses 1.0.0`.
 Built-in output keeps the core version alone. PAGE XML uses the combined version in `Creator`
 and adds a `domain` metadata item for pack output.
 

@@ -19,7 +19,7 @@ To build an image with a pack built in, use the published image as a base and co
 into it:
 
 ```dockerfile
-FROM ghcr.io/moravianlibrary/tuzkaocr:1.9.0
+FROM ghcr.io/moravianlibrary/tuzkaocr:1.10.0
 COPY sk-theses.tpack /app/domains/
 ```
 
@@ -63,9 +63,9 @@ both where those controls are available. Values that come only from the bundled
 
 ## Version reporting
 
-Without a custom domain, the reported version is the core version, such as `1.9.0`. Output
+Without a custom domain, the reported version is the core version, such as `1.10.0`. Output
 made with a pack includes its name and version as build metadata, such as
-`1.9.0+sk-theses.1.0`. The CLI reports the active default pack with `--version`; API clients
+`1.10.0+sk-theses.1.0`. The CLI reports the active default pack with `--version`; API clients
 can query the authenticated `/api/v1/version` endpoint. ALTO records the combined version in
 `softwareVersion` and identifies the pack in `applicationDescription`.
 
