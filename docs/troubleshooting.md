@@ -37,6 +37,11 @@
     Try `--contrast auto` (`TUZKAOCR_CONTRAST=auto`) — see
     [contrast normalisation](configuration.md#contrast-normalisation).
 
+??? failure "Faint text is missing, or show-through is read as gibberish"
+    [Show-through removal](configuration.md#show-through) is on for printed pages. To keep
+    all faint text, pass `--no-showthrough` (`TUZKAOCR_SHOWTHROUGH=false`, API
+    `showthrough=false`).
+
 ??? failure "Columns or articles are read in the wrong order"
     Try `TUZKAOCR_READING_ORDER=basic` (CLI `--reading-order basic`) — see
     [reading order](configuration.md#reading-order).

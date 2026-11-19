@@ -224,7 +224,8 @@ def _submit(request: Request, spool_path: Path, page_id: str,
             physical_img_nr: Optional[int] = None,
             orientation: Optional[str] = None,
             orientation_threshold: Optional[float] = None,
-            contrast: Optional[str] = None) -> str:
+            contrast: Optional[str] = None,
+            showthrough: Optional[bool] = None) -> str:
     domain = _validate_domain(request, domain)
     fmt = _validate_fmt(fmt)
     alto_profile = _validate_alto_profile(alto_profile)
@@ -260,6 +261,7 @@ def _submit(request: Request, spool_path: Path, page_id: str,
                                  orientation=orientation,
                                  orientation_threshold=orientation_threshold,
                                  contrast=contrast,
+                                 showthrough=showthrough,
                                  _orientation_image=orientation_image)
 
     result_ext = {"txt": ".txt", "page": ".page.xml"}.get(fmt, ".xml")
@@ -303,6 +305,7 @@ async def list_models(request: Request, caller_name: Optional[str] = Depends(_re
             "orientation_recheck_chars": default_cfg.orientation_recheck_chars,
             "contrast": default_cfg.contrast,
             "contrast_ink": default_cfg.contrast_ink,
+            "showthrough": default_cfg.showthrough,
         },
         "kramarky": {
             "ocr_model":    Path(builtin["kramarky"].ocr_model).name,
@@ -355,7 +358,8 @@ async def _ingest_upload(request: Request, upload: UploadFile,
                          physical_img_nr: Optional[int] = None,
                          orientation: Optional[str] = None,
                          orientation_threshold: Optional[float] = None,
-                         contrast: Optional[str] = None) -> str:
+                         contrast: Optional[str] = None,
+                         showthrough: Optional[bool] = None) -> str:
     _reject_if_full(request)
     cfg = request.app.state.config
     spool_path = await _read_upload(upload, cfg.spool_dir)
@@ -375,6 +379,7 @@ async def _ingest_upload(request: Request, upload: UploadFile,
             orientation=orientation,
             orientation_threshold=orientation_threshold,
             contrast=contrast,
+            showthrough=showthrough,
         )
         submitted = True
         return job_id
@@ -396,6 +401,7 @@ async def process_image(
     orientation: Optional[str] = Form(None),
     orientation_threshold: Optional[float] = Form(None),
     contrast: Optional[str] = Form(None),
+    showthrough: Optional[bool] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
     job_id = await _ingest_upload(request, image, domain, fmt,
@@ -405,7 +411,8 @@ async def process_image(
                                   physical_img_nr=physical_img_nr,
                                   orientation=orientation,
                                   orientation_threshold=orientation_threshold,
-                                  contrast=contrast)
+                                  contrast=contrast,
+                                  showthrough=showthrough)
     return {"job_id": job_id, "status": "queued"}
 
 
@@ -473,6 +480,7 @@ async def upload_legacy(
     orientation: Optional[str] = Form(None),
     orientation_threshold: Optional[float] = Form(None),
     contrast: Optional[str] = Form(None),
+    showthrough: Optional[bool] = Form(None),
     caller_name: Optional[str] = Depends(_require_key),
 ):
     job_id = await _ingest_upload(request, file, domain, fmt,
@@ -482,7 +490,8 @@ async def upload_legacy(
                                   physical_img_nr=physical_img_nr,
                                   orientation=orientation,
                                   orientation_threshold=orientation_threshold,
-                                  contrast=contrast)
+                                  contrast=contrast,
+                                  showthrough=showthrough)
     return {"id": job_id}
 
 

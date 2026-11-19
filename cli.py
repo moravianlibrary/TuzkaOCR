@@ -82,6 +82,10 @@ def main() -> None:
                    help="Disable the extra layout pass for text far larger than the body "
                         "text (newspaper mastheads)")
     p.set_defaults(large_text=None)
+    p.add_argument("--no-showthrough", dest="showthrough", action="store_false",
+                   help="Keep faint mirrored text bleeding through from the reverse side "
+                        "instead of removing it (printed domain)")
+    p.set_defaults(showthrough=None)
     p.add_argument("--role-classifier", dest="role_classifier", action="store_true",
                    help="Tag each line with role (body/heading/header/footer/page_number) in ALTO TYPE attr")
     p.set_defaults(role_classifier=False)
@@ -192,6 +196,7 @@ def main() -> None:
         "adaptive_downsample": False if args.adaptive is False else None,
         "reading_order": args.reading_order if domain.base == "print" else None,
         "large_text": False if args.large_text is False else None,
+        "showthrough": False if args.showthrough is False else None,
         "role_classifier": args.role_classifier,
         "alto_profile": args.alto_profile,
         "orientation": args.orientation,

@@ -21,6 +21,7 @@ from .ocr.recognizer import create_recognizer
 from .alto import HYPHEN_CHARS, build_alto
 from .pagexml import build_page_xml
 from .orientation import CLASS_ANGLES, OrientationClassifier
+from .showthrough import filter_lines
 
 
 @dataclass
@@ -29,6 +30,7 @@ class _LineInput:
     M: np.ndarray
     region_idx: int
     baseline: Optional[list] = None
+    ink: Optional[np.ndarray] = None
 
 _TARGET_H      = 40
 _BACKBONE_STRIDE = 2
@@ -242,7 +244,7 @@ def _add_space_boxes(blocks: list) -> None:
 def _probe_score(chosen: dict) -> tuple[float, int]:
     weighted = 0.0
     char_count = 0
-    for result in chosen["results"]:
+    for result in chosen.get("probe_results", chosen["results"]):
         for word in result.words:
             count = len(word.text)
             if not count:
@@ -349,12 +351,15 @@ class PageProcessor:
                     continue
                 if line.large:
                     gray, M = stretch_crop(gray, M)
+                ink = None
                 if contrast_mode == "line":
+                    ink = gray
                     low, median = _contrast_stats(gray)
                     gray = _contrast_stretch(gray, low, median)
                 line_data.append(_LineInput(
                     gray=gray, M=M, region_idx=ri,
-                    baseline=[(x * img_scale, y * img_scale) for x, y in line.baseline]))
+                    baseline=[(x * img_scale, y * img_scale) for x, y in line.baseline],
+                    ink=ink))
         results = (self.recognizer.run_lines([d.gray for d in line_data],
                                              workers=self.config.line_workers)
                    if line_data else [])
@@ -362,6 +367,17 @@ class PageProcessor:
         mean_conf = float(np.mean(confs)) if confs else 0.0
         return {"line_data": line_data, "results": results, "mean_conf": mean_conf,
                 "regions": lp["regions"], "img_scale": img_scale}
+
+    def _filter_showthrough(self, chosen: dict) -> dict:
+        line_data = chosen["line_data"]
+        if not line_data:
+            return chosen
+        results = filter_lines(self.recognizer, [d.gray for d in line_data],
+                               [d.gray if d.ink is None else d.ink for d in line_data],
+                               chosen["results"], _BACKBONE_STRIDE)
+        confs = [r.confidence for r in results if r.text.strip()]
+        return {**chosen, "results": results, "probe_results": chosen["results"],
+                "mean_conf": float(np.mean(confs)) if confs else 0.0}
 
     @staticmethod
     def _assemble_blocks(line_data: List[_LineInput], results: list,
@@ -418,10 +434,12 @@ class PageProcessor:
              orientation_threshold: Optional[float] = None,
              orientation_probe: Optional[str] = None,
              contrast: Optional[str] = None,
-             orientation_image: Optional[np.ndarray] = None):
+             orientation_image: Optional[np.ndarray] = None,
+             showthrough: Optional[bool] = None):
         img_h, img_w = img_bgr.shape[:2]
         cfg = self.config
         hs = cfg.height_scale if height_scale is None else height_scale
+        use_showthrough = cfg.showthrough if showthrough is None else bool(showthrough)
 
         mode = cfg.orientation if orientation is None else orientation
         threshold = (cfg.orientation_threshold if orientation_threshold is None
@@ -452,6 +470,8 @@ class PageProcessor:
             lp = self._layout_pass(upright)
             lp["contrast_mode"] = contrast_mode
             chosen = self._recognize_pass(upright, hs, lp)
+            if use_showthrough:
+                chosen = self._filter_showthrough(chosen)
             blocks = self._assemble_blocks(
                 chosen["line_data"], chosen["results"], chosen.get("regions"),
                 chosen.get("img_scale") or 1.0,
@@ -556,6 +576,7 @@ class PageProcessor:
                 orientation_threshold: Optional[float] = None,
                 orientation_probe: Optional[str] = None,
                 contrast: Optional[str] = None,
+                showthrough: Optional[bool] = None,
                 _orientation_image: Optional[np.ndarray] = None):
         img_h, img_w, blocks, mean_conf, img_scale, orientation_meta = self._run(
             img_bgr, height_scale=height_scale, role_classifier=role_classifier,
@@ -564,6 +585,7 @@ class PageProcessor:
             orientation_probe=orientation_probe,
             contrast=contrast,
             orientation_image=_orientation_image,
+            showthrough=showthrough,
         )
         cfg = self.config
         text = _blocks_to_text(blocks)

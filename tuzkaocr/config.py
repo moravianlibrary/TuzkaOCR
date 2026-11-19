@@ -75,6 +75,7 @@ class Config:
     layout_line_height:  float = field(default_factory=lambda: _env("LAYOUT_LINE_HEIGHT", 12.0))
     reading_order:       str   = field(default_factory=lambda: _env("READING_ORDER", "columns"))
     large_text:          bool  = field(default_factory=lambda: _env("LARGE_TEXT", True))
+    showthrough:         bool  = field(default_factory=lambda: _env("SHOWTHROUGH", True))
     
     cpu_mem_arena: bool = field(default_factory=lambda: _env("CPU_MEM_ARENA", True))
 

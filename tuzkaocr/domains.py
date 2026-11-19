@@ -26,7 +26,7 @@ SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
 SETTING_NAMES = {
     "orientation", "orientation_threshold", "orientation_probe", "orientation_recheck",
     "contrast", "contrast_ink", "reading_order", "height_scale", "large_text",
-    "adaptive_downsample",
+    "adaptive_downsample", "showthrough",
 }
 MAX_PACK_BYTES = 500 * 1024 * 1024
 MAX_PACK_MEMBERS = 128
@@ -596,6 +596,7 @@ def build_domain_config(base_cfg: Config, domain: Domain, *,
             adaptive_downsample=False,
             reading_order="basic",
             large_text=False,
+            showthrough=False,
         )
 
     if domain.pack:

@@ -51,6 +51,7 @@ Legacy-compatible aliases exist for older clients — see [below](#legacy-endpoi
 | `orientation` | string | server default (`off`) | `off`, `auto` |
 | `orientation_threshold` | float | server default (`0.9`) | 0–1 |
 | `contrast` | string | server default (`off`) | `off`, `on`, `auto`, `line` |
+| `showthrough` | bool | server default (on for printed pages, off for other domains) | `true` / `false` |
 | `source_identifier` | string | *none* | Written into the ALTO as `fileIdentifier` |
 | `physical_img_nr` | int | *from the filename* | Sequential page number within the volume; must be >=1 |
 
@@ -66,7 +67,8 @@ Invalid format and setting values are rejected with **400** before the job is cr
 unknown domain returns **422** and lists the built-in domains and loaded pack names. `default`
 uses a pack marked as default, when present; `print` always selects the built-in print domain.
 
-`orientation` and `contrast` are explained in [Configuration](configuration.md#page-orientation).
+`orientation` and `contrast` are explained in [Configuration](configuration.md#page-orientation),
+`showthrough` in [show-through](configuration.md#show-through).
 
 ## Polling and downloading
 

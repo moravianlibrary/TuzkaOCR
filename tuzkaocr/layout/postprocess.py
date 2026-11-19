@@ -105,11 +105,14 @@ def _extract_lines(maps: np.ndarray, threshold: float = 0.25,
     structure = np.ones((vertical_connection_range, 3), np.uint8)
     dilated = cv2.dilate(binary, structure, iterations=1)
     num, labels = cv2.connectedComponents(dilated, connectivity=8)
-    labels = labels * binary
+    all_ys, all_xs = np.nonzero(binary)
+    point_labels = labels[all_ys, all_xs]
+    order = np.argsort(point_labels, kind="stable")
+    all_ys, all_xs = all_ys[order], all_xs[order]
+    cuts = np.flatnonzero(np.diff(point_labels[order])) + 1
 
     lines: List[TextLine] = []
-    for lab in range(1, num):
-        ys, xs = np.where(labels == lab)
+    for ys, xs in zip(np.split(all_ys, cuts), np.split(all_xs, cuts)):
         if xs.size <= 5:
             continue
         baseline = _resample_baseline(xs, ys)

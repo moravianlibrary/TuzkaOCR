@@ -58,6 +58,7 @@ near `PAGE_WORKERS × LINE_WORKERS × OCR_THREADS`, so do not oversubscribe a sm
 | `TUZKAOCR_LAYOUT_LINE_HEIGHT` | `12` | Target text-line height, in pixels, at the layout model input when adaptive downsampling is on (valid range 4–64); `0` falls back to the fixed downsample |
 | `TUZKAOCR_READING_ORDER` | `columns` | Order of text blocks on printed pages: `columns` (column by column, aware of printed rules) or `basic` (horizontal bands, left to right); see [reading order](#reading-order) |
 | `TUZKAOCR_LARGE_TEXT` | `true` | Extra layout pass for text far larger than the body text, such as newspaper mastheads; see [large text](#large-text) |
+| `TUZKAOCR_SHOWTHROUGH` | `true` | Remove faint mirrored text showing through from the reverse side of the sheet; see [show-through](#show-through) |
 | `TUZKAOCR_CROP_ENDPOINT_EXT` | `0.0` | Extend line crops at both ends, as a fraction of line height |
 | `TUZKAOCR_COLUMN_SPLIT` | `false` | Order lines column-by-column within a region |
 | `TUZKAOCR_CONTRAST` | `off` | `off`, `on`, `auto` or `line`; see [contrast normalisation](#contrast-normalisation) |
@@ -120,8 +121,18 @@ than its body text, such as a newspaper masthead, gets one extra coarse layout p
 title is read as one line instead of letter fragments. It costs 0.2–0.7 s on pages that need
 it and nothing on the rest.
 
-Reading order and large text apply to the printed domain only; the other domains use the
-`basic` order without the large-text pass.
+### Show-through
+
+On thin paper, text from the reverse side shows through as faint mirrored print that OCR
+reads as gibberish. With `TUZKAOCR_SHOWTHROUGH=true` (the default), faint lines and faint
+words at line ends are read again flipped; if the flipped reading is more confident, they
+are removed. Real faint text, such as pencil numbers or faded print, reads better unflipped
+and is kept. Set `TUZKAOCR_SHOWTHROUGH=false` (CLI `--no-showthrough`, API
+`showthrough=false`) to keep everything.
+
+Reading order, large text and show-through removal apply to the printed domain only; the
+other domains use the `basic` order without either. The API's `showthrough=true` enables
+show-through removal for any domain.
 
 ## Line roles
 

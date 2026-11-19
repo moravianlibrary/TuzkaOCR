@@ -171,10 +171,12 @@ None of these are needed for ordinary OCR. See [Configuration](configuration.md#
 | `--no-adaptive` | `TUZKAOCR_ADAPTIVE_DOWNSAMPLE` (on) | Use the fixed layout downsample instead of sizing it to the page's text |
 | `--reading-order` | `columns` | Block order on printed pages: `columns` or `basic` |
 | `--no-large-text` | *large text on* | Skip the extra layout pass for mastheads and other very large text |
+| `--no-showthrough` | *show-through removal on* | Keep faint mirrored text showing through from the reverse side; see [show-through](configuration.md#show-through) |
 | `--role-classifier` | off | Tag each line with a structural role in the ALTO output |
 | `--contrast` | `off` | `off`, `on`, `auto` or `line`; see [contrast normalisation](configuration.md#contrast-normalisation) |
 
-`--no-adaptive`, `--reading-order` and `--no-large-text` affect the printed domain only; see
+`--no-adaptive`, `--reading-order`, `--no-large-text` and `--no-showthrough` affect the printed
+domain only; see
 [Configuration](configuration.md#adaptive-downsampling). For roles see
 [Output formats](output-formats.md#line-roles).
 
