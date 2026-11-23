@@ -2,9 +2,33 @@
 
 ## Installation
 
+??? failure "The one-line installer fails or is blocked"
+    The script prints `TuzkaOCR install failed:` and the reason.
+
+    - **Nothing happens, or security software reports the line** — the computer is managed
+      and blocks installing software (Group Policy execution policy, AppLocker, endpoint
+      protection). Ask IT to allow it, or install [without uv](beginners.md#without-uv).
+    - **`could not reach GitHub`** — a proxy or firewall blocks `github.com`. The installer
+      also needs `astral.sh` (uv), `pypi.org` and `files.pythonhosted.org` (libraries) and
+      `github.com` / `objects.githubusercontent.com` (Python and TuzkaOCR).
+    - **`Intel Macs are not supported`** — use the [Docker image](docker.md).
+    - **`this Terminal runs under Rosetta`** — in Finder, select Terminal in Applications →
+      Utilities, choose *Get Info*, untick *Open using Rosetta*, and run the line again.
+    - **`tuzkaocr` is not found afterwards** — open a new terminal window; windows opened
+      before the install do not see it.
+
+??? failure "`pip install` tries to build scipy or numpy, or asks for gfortran or a Fortran compiler"
+    Your Python is too new. TuzkaOCR supports Python 3.11 to 3.14; on 3.15 no ready-made
+    packages exist, so pip falls back to compiling them from source and fails. Do not
+    install a Fortran compiler — it only moves the failure to the next package. Either
+    [install with the one-line installer](install.md#install-with-uv), which fetches a
+    supported Python itself, or
+    [install Python 3.14](beginners.md#install-python), create the virtual environment with
+    it, and install again.
+
 ??? failure "`pip install` fails on onnxruntime"
     Almost always an unsupported platform or interpreter. Confirm `python3 --version` is
-    3.10 or newer, and that you are not on an **Intel Mac** — `onnxruntime` 1.18+ ships no
+    between 3.11 and 3.14, and that you are not on an **Intel Mac** — `onnxruntime` 1.18+ ships no
     x86-64 macOS wheels. Use the [Docker CPU image](docker.md) there.
 
 ??? failure "`tuzkaocr: command not found`"

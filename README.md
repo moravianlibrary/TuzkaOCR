@@ -17,6 +17,16 @@ plain text. It needs about 13 MB of models per domain and no GPU.
 
 ## Quickstart
 
+One line, no Python needed (installs [uv](https://docs.astral.sh/uv/) and the newest release):
+
+```bash
+curl -LsSf https://moravianlibrary.github.io/TuzkaOCR/install.sh | sh
+```
+
+Windows: `powershell -ExecutionPolicy ByPass -c "irm https://moravianlibrary.github.io/TuzkaOCR/install.ps1 | iex"`
+
+Or from a checkout:
+
 ```bash
 git clone https://github.com/moravianlibrary/TuzkaOCR.git
 cd TuzkaOCR
@@ -28,7 +38,7 @@ tuzkaocr letter.jpg --domain handwritten --format txt --out letter.txt
 tuzkaocr scans/ --batch --format multi --out-dir results/
 ```
 
-Python 3.10+ on Linux, Windows or Apple Silicon macOS. On Intel Macs, use Docker.
+Python 3.11–3.14 on Linux, Windows or Apple Silicon macOS. On Intel Macs, use Docker.
 New to the command line? Follow the [step-by-step guide](docs/beginners.md).
 
 ## HTTP service

@@ -9,12 +9,15 @@
 
 | | |
 |---|---|
-| Python | 3.10 or newer |
+| Python | 3.11 to 3.14 (3.15 is not supported yet — no `onnxruntime` build exists for it) |
 | Disk | ~1.5 GB for dependencies, plus ~80 MB of bundled models |
 | Hardware | Any x86-64 or ARM64 CPU; no GPU needed |
 | Network | None at runtime — models ship inside the package |
 
-Dependencies are version-pinned, so install into a virtual environment.
+Install into a virtual environment. `onnxruntime` and `opencv-python-headless` are pinned
+exactly because they determine the OCR output; `numpy`, `scipy` and `pyyaml` follow your
+Python version. `requirements.txt` pins the exact set the Docker image is built with,
+which installs on Python 3.11 to 3.13.
 
 ### Platform support
 
@@ -24,6 +27,35 @@ Linux, Windows, and Apple Silicon macOS are supported.
     Upstream `onnxruntime` no longer publishes x86-64 macOS wheels — 1.18 and later are
     arm64-only — so `pip install` fails on Intel hardware. Use the
     [Docker CPU image](docker.md) instead.
+
+## Install with uv
+
+The simplest way. One line installs [uv](https://docs.astral.sh/uv/) if it is missing, then
+the newest release with a supported Python, and puts `tuzkaocr` on your `PATH` — no virtual
+environment to activate:
+
+```bash
+curl -LsSf https://moravianlibrary.github.io/TuzkaOCR/install.sh | sh
+```
+
+On Windows:
+
+```bat
+powershell -ExecutionPolicy ByPass -c "irm https://moravianlibrary.github.io/TuzkaOCR/install.ps1 | iex"
+```
+
+Open a new terminal afterwards. Rerunning the line upgrades to the newest release; set
+`TUZKAOCR_VERSION=v1.10.1` first to install a specific tag. The scripts
+([`install.sh`](install.sh), [`install.ps1`](install.ps1)) only wrap uv; by hand:
+
+```bash
+uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.10.1.zip
+```
+
+Keep `--python`: uv otherwise picks the newest Python, which may not be supported. On
+Windows the script requests the x86-64 Python (`cpython-3.13-windows-x86_64-none`), so
+ARM64 Windows runs it under emulation. [Step by step](beginners.md) walks through the same
+for newcomers.
 
 ## Install from a checkout
 
