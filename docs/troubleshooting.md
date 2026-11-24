@@ -27,10 +27,16 @@
     - **On another computer** — not supported: the app listens on `127.0.0.1` only. Use the
       [HTTP API](api.md) for remote use.
 
-??? failure "`tuzkaocr app` says *This folder cannot be opened*"
-    The account running the app cannot read the folder. On macOS, Terminal needs permission
-    for Desktop, Documents, Downloads and removable drives: **System Settings → Privacy &
-    Security → Files and Folders → Terminal**.
+??? failure "`tuzkaocr app` says *macOS is blocking this folder* or *This folder cannot be opened*"
+    - **macOS is blocking this folder** — macOS privacy protection. Desktop, Documents,
+      Downloads and removable drives need permission for the terminal app that started
+      TuzkaOCR (Terminal, iTerm, …). macOS asks only once; after a refusal, turn it on in
+      **System Settings → Privacy & Security → Files & Folders →** the terminal app, or reset
+      the answer so it asks again, for example
+      `tccutil reset SystemPolicyDesktopFolder com.apple.Terminal` (iTerm:
+      `com.googlecode.iterm2`). Quit the terminal and start the app again.
+    - **This folder cannot be opened** — the account running the app has no read
+      permission for the folder.
 
 ??? failure "`pip install` tries to build scipy or numpy, or asks for gfortran or a Fortran compiler"
     Your Python is too new. TuzkaOCR supports Python 3.11 to 3.14; on 3.15 no ready-made

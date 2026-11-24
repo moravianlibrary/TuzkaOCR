@@ -87,6 +87,8 @@ const STRINGS = {
     emptyBody: "TuzkaOCR reads JPG, PNG and TIFF images. Open a folder that contains them.",
     noAccessTitle: "This folder cannot be opened",
     noAccessBody: "Your account does not have permission to read it.",
+    macPrivacyTitle: "macOS is blocking this folder",
+    macPrivacyBody: "macOS has not allowed your terminal app (Terminal or iTerm) to open it. In System Settings → Privacy & Security → Files & Folders, turn this folder on for your terminal app, then quit the terminal and start tuzkaocr app again.",
     notFoundTitle: "This folder no longer exists",
     notFoundBody: "It may have been moved, renamed or disconnected.",
     offline: "TuzkaOCR has stopped. To continue, open a terminal, type <code>tuzkaocr app</code> and press Enter.",
@@ -179,6 +181,8 @@ const STRINGS = {
     emptyBody: "TuzkaOCR čte obrázky JPG, PNG a TIFF. Otevřete složku, ve které jsou.",
     noAccessTitle: "Tuto složku nelze otevřít",
     noAccessBody: "Váš účet k ní nemá oprávnění.",
+    macPrivacyTitle: "macOS tuto složku blokuje",
+    macPrivacyBody: "macOS nepovolil vašemu terminálu (Terminal nebo iTerm) ji otevřít. V Nastavení systému → Soukromí a zabezpečení → Soubory a složky ji u svého terminálu zapněte, pak terminál ukončete a znovu spusťte tuzkaocr app.",
     notFoundTitle: "Tato složka už neexistuje",
     notFoundBody: "Mohla být přesunuta, přejmenována nebo odpojena.",
     offline: "TuzkaOCR už neběží. Chcete-li pokračovat, otevřete terminál, napište <code>tuzkaocr app</code> a stiskněte Enter.",
@@ -396,11 +400,12 @@ async function openFolder(path, push = true) {
     }
   } catch (e) {
     if (e.code === "offline" || e.code === "forbidden") return;
-    state.folderError = e.code === "no_access" ? "noAccess" : "notFound";
-    state.folder = state.folder && e.code === "no_access"
+    const denied = e.code === "no_access" || e.code === "mac_privacy";
+    state.folderError = e.code === "mac_privacy" ? "macPrivacy" : denied ? "noAccess" : "notFound";
+    state.folder = state.folder && denied
       ? state.folder
       : { path, name: path, parent: null, crumbs: [], dirs: [], images: [], output: "", output_is_fallback: false };
-    if (e.code !== "no_access") state.folder.images = [];
+    if (!denied) state.folder.images = [];
   }
   renderPlaces();
   renderList();

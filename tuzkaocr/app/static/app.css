@@ -189,6 +189,7 @@ svg { fill: none; stroke: currentColor; stroke-width: 1.4; stroke-linecap: round
 
 .crumbs {
   display: flex;
+  flex: 1 1 auto;
   align-items: center;
   min-width: 0;
   margin: 0;

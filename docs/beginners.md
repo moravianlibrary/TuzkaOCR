@@ -122,9 +122,11 @@ When it finishes, **Show text** puts each scan next to its text, and **Open fold
 the files.
 
 !!! note "On a Mac: *Terminal would like to access files in your Documents folder*"
-    macOS asks once per folder such as Documents, Desktop or Downloads. Click **Allow**.
-    If you clicked *Don't Allow*, the app says *This folder cannot be opened*; turn it back
-    on in **System Settings → Privacy & Security → Files and Folders → Terminal**.
+    macOS asks once per folder such as Documents, Desktop or Downloads, naming the terminal
+    app you started TuzkaOCR from — Terminal, or iTerm if you use that. Click **Allow**. If
+    it was refused once, macOS stops asking and the app says *macOS is blocking this
+    folder*; turn the folder on in **System Settings → Privacy & Security → Files &
+    Folders →** your terminal app, then quit the terminal and start `tuzkaocr app` again.
 
 ## Where the results go
 
@@ -170,7 +172,8 @@ the folder below, then start the app again. It appears as an extra document type
 | `command not found` / `is not recognized` | Installed with the step 2 line: open a new terminal window — windows opened before the install do not see it. Installed [without uv](#without-uv): the `(.venv)` marker is missing from your prompt; re-run the [activate line](#coming-back-tomorrow). |
 | The browser shows *TuzkaOCR has stopped* | The terminal window was closed. Open one and type `tuzkaocr app`. |
 | The browser says the page cannot be reached | Same: the app is not running. Start it again; it opens a new page. |
-| *This folder cannot be opened* | Your account may not read it. On a Mac, see the note in [step 4](#step-4-read-your-first-pages). |
+| *macOS is blocking this folder* | See the Mac note in [step 4](#step-4-read-your-first-pages). |
+| *This folder cannot be opened* | Your account may not read it — a colleague's or a system folder, for example. |
 | The text is gibberish | Wrong document type for the material. See [step 4](#step-4-read-your-first-pages). |
 | The text is mostly right but words are mangled | Likely the scan itself. Below roughly 200 dpi, no setting rescues it. |
 | A page is marked *Failed* | Hover over *Failed* to see why. Usually the file is damaged or not really an image. |

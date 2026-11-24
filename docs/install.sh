@@ -26,8 +26,8 @@ main() {
         *) fail "could not find the latest TuzkaOCR release (got '$tag')." ;;
     esac
 
-    "$uv" tool update-shell >/dev/null 2>&1 || true
     bin=$("$uv" tool dir --bin)
+    PATH=$(path_without "$bin") "$uv" tool update-shell >/dev/null 2>&1 || true
     PATH="$bin:$PATH"
     export PATH
 
@@ -40,7 +40,7 @@ main() {
 
     say ""
     say "TuzkaOCR $tag is installed."
-    say "Close this terminal window, open a new one, and type:  tuzkaocr --help"
+    say "Close this terminal window, open a new one, and type:  tuzkaocr app"
 }
 
 say() {
@@ -96,6 +96,10 @@ latest_tag() {
         final=$(wget -S --spider "$url" 2>&1 | sed -n 's/^ *[Ll]ocation: *//p' | tail -n 1 | tr -d '\r' | sed 's/ .*//') || return 1
     fi
     printf '%s\n' "${final##*/}"
+}
+
+path_without() {
+    printf '%s\n' "$PATH" | tr ':' '\n' | grep -vxF "$1" | grep -vxF "$1/" | paste -sd: -
 }
 
 find_uv() {

@@ -54,9 +54,11 @@ function Install-TuzkaOCR {
     }
     if ($tag -notmatch '^v[0-9]') { Fail "could not find the latest TuzkaOCR release (got '$tag')." }
 
-    & $uv tool update-shell *> $null
     $bin = (& $uv tool dir --bin).Trim()
-    $env:Path = "$bin;$env:Path"
+    $savedPath = $env:Path
+    $env:Path = (($env:Path -split ';') | Where-Object { $_ -and ($_.TrimEnd('\') -ne $bin.TrimEnd('\')) }) -join ';'
+    & $uv tool update-shell *> $null
+    $env:Path = "$bin;$savedPath"
 
     Write-Host "Installing TuzkaOCR $tag. This downloads a few hundred megabytes and takes a few minutes..."
     & $uv tool install --force --python $pythonRequest "https://github.com/$repo/archive/refs/tags/$tag.zip"
@@ -67,7 +69,7 @@ function Install-TuzkaOCR {
 
     Write-Host ''
     Write-Host "TuzkaOCR $tag is installed." -ForegroundColor Green
-    Write-Host 'Close this window, open a new one, and type:  tuzkaocr --help'
+    Write-Host 'Close this window, open a new one, and type:  tuzkaocr app'
 }
 
 try {

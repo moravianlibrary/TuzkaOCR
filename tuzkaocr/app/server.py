@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import argparse
 import dataclasses
+import errno
 import json
 import mimetypes
 import os
@@ -175,6 +176,12 @@ def list_folder(path: Path, custom_output: str | None = None) -> dict:
 
 def _natural_key(name: str):
     return [int(t) if t.isdigit() else t.lower() for t in re.split(r"(\d+)", name)]
+
+
+def _denied_code(exc: OSError) -> str:
+    if sys.platform == "darwin" and exc.errno == errno.EPERM:
+        return "mac_privacy"
+    return "no_access"
 
 
 def open_in_file_manager(path: Path) -> None:
@@ -453,8 +460,8 @@ def make_handler(app: App):
                         custom = None
                     try:
                         return self._json(list_folder(path, custom))
-                    except PermissionError:
-                        return self._error(403, "no_access", str(path))
+                    except PermissionError as exc:
+                        return self._error(403, _denied_code(exc), str(path))
                 if route == "thumb":
                     size = 160 if q.get("size") != "large" else 2000
                     blob = app.thumbs.get(Path(q["path"]), size)
