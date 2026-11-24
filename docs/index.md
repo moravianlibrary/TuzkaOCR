@@ -61,6 +61,13 @@ tuzkaocr page.jpg --format txt --out page.txt
 | Parse the output | [Output formats](output-formats.md) |
 | Fix something that broke | [Troubleshooting](troubleshooting.md) |
 
+## Contact
+
+TuzkaOCR is developed at the Moravian Library in Brno. Questions, problems and feedback:
+
+- Filip Bím — [filip.bim@mzk.cz](mailto:filip.bim@mzk.cz)
+- Martina Dvořáková — [dvorakovam@mzk.cz](mailto:dvorakovam@mzk.cz)
+
 ## Licensing
 
 The source code is licensed under the Apache License 2.0. The model artifacts in

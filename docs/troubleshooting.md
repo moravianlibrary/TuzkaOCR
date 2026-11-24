@@ -177,3 +177,11 @@
 ??? failure "Unknown domain in the CLI or API"
     Run `python cli.py --list-domains` or query `/api/v1/models`; use a listed built-in or pack
     name. An explicit `print` selection bypasses a pack default.
+
+## Still stuck?
+
+Write to us, with the exact command or what you clicked, and the last lines the terminal
+printed:
+
+- Filip Bím — [filip.bim@mzk.cz](mailto:filip.bim@mzk.cz)
+- Martina Dvořáková — [dvorakovam@mzk.cz](mailto:dvorakovam@mzk.cz)

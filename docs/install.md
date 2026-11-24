@@ -44,7 +44,9 @@ On Windows:
 powershell -ExecutionPolicy ByPass -c "irm https://moravianlibrary.github.io/TuzkaOCR/install.ps1 | iex"
 ```
 
-Open a new terminal afterwards. Rerunning the line upgrades to the newest release; set
+If `uv` is already on your `PATH` — from Homebrew (`brew install uv`), winget, pipx or
+uv's own installer — the script uses it instead of installing another copy. Open a new
+terminal afterwards. Rerunning the line upgrades to the newest release; set
 `TUZKAOCR_VERSION=v1.11.0` first to install a specific tag. The scripts
 ([`install.sh`](install.sh), [`install.ps1`](install.ps1)) only wrap uv; by hand:
 
@@ -102,6 +104,17 @@ Only this mode reads `tuzkaocr.env` — see
 git pull
 pip install --force-reinstall --no-deps .
 ```
+
+## Uninstalling
+
+```bash
+uv tool uninstall tuzkaocr     # installed with uv or the one-line installer
+pip uninstall tuzkaocr         # installed with pip, inside its virtual environment
+```
+
+Custom domain packs live in `~/.local/share/tuzkaocr/domains/` (or `TUZKAOCR_DOMAINS_DIR`)
+and are not removed. To remove uv itself and the Python it manages, see
+[Step by step](beginners.md#uninstalling).
 
 ## Development install
 

@@ -31,6 +31,8 @@ different computer.
 
 ## Step 1 — Open a terminal
 
+Click your system below — **Windows**, **Mac** or **Linux**.
+
 === "Windows"
 
     Press the <kbd>Windows</kbd> key, type `cmd`, and press <kbd>Enter</kbd>. A black
@@ -54,7 +56,13 @@ Copy this one line into the terminal and press <kbd>Enter</kbd>:
     powershell -ExecutionPolicy ByPass -c "irm https://moravianlibrary.github.io/TuzkaOCR/install.ps1 | iex"
     ```
 
-=== "Mac / Linux"
+=== "Mac"
+
+    ```bash
+    curl -LsSf https://moravianlibrary.github.io/TuzkaOCR/install.sh | sh
+    ```
+
+=== "Linux"
 
     ```bash
     curl -LsSf https://moravianlibrary.github.io/TuzkaOCR/install.sh | sh
@@ -150,6 +158,75 @@ and settings. Pages read earlier show *Read*, with a **View** link.
 Run the [step 2](#step-2-install-tuzkaocr) line again. It always installs the newest
 release, replacing the old one.
 
+## Uninstalling
+
+To remove TuzkaOCR, type in a terminal:
+
+```bash
+uv tool uninstall tuzkaocr
+```
+
+Your scans and the `TuzkaOCR` results folders stay where they are; delete them yourself if
+you no longer need them.
+
+If you installed uv only for TuzkaOCR, you can remove it too, with the Python it downloaded.
+Skip this if you use uv for anything else. Run the lines one at a time:
+
+=== "Windows"
+
+    In **PowerShell** (press the <kbd>Windows</kbd> key, type `powershell`, press
+    <kbd>Enter</kbd>):
+
+    ```powershell
+    uv cache clean
+    ```
+
+    ```powershell
+    Remove-Item -Recurse -Force "$(uv python dir)", "$(uv tool dir)"
+    ```
+
+    ```powershell
+    Remove-Item -Force -ErrorAction SilentlyContinue "$HOME\.local\bin\uv.exe", "$HOME\.local\bin\uvx.exe", "$HOME\.local\bin\uvw.exe"
+    ```
+
+    If you installed uv with winget, replace the last line with
+    `winget uninstall --id=astral-sh.uv -e`.
+
+=== "Mac"
+
+    ```bash
+    uv cache clean
+    ```
+
+    ```bash
+    rm -rf "$(uv python dir)" "$(uv tool dir)"
+    ```
+
+    ```bash
+    rm -f ~/.local/bin/uv ~/.local/bin/uvx
+    ```
+
+    If you installed uv with Homebrew, replace the last line with `brew uninstall uv`.
+
+=== "Linux"
+
+    ```bash
+    uv cache clean
+    ```
+
+    ```bash
+    rm -rf "$(uv python dir)" "$(uv tool dir)"
+    ```
+
+    ```bash
+    rm -f ~/.local/bin/uv ~/.local/bin/uvx
+    ```
+
+Leave the small `env` file in the same folder alone: your terminal loads it when it starts,
+and removing it makes every new window show an error.
+If you added a [custom model](#your-own-model), delete the `tuzkaocr` folder in
+`.local/share` as well.
+
 ## Your own model
 
 If your institution gave you a custom model — a file ending in `.tpack` — copy it into
@@ -159,7 +236,11 @@ the folder below, then start the app again. It appears as an extra document type
 
     `%USERPROFILE%\.local\share\tuzkaocr\domains\`
 
-=== "Mac / Linux"
+=== "Mac"
+
+    `~/.local/share/tuzkaocr/domains/`
+
+=== "Linux"
 
     `~/.local/share/tuzkaocr/domains/`
 
@@ -179,9 +260,13 @@ the folder below, then start the app again. It appears as an extra document type
 | A page is marked *Failed* | Hover over *Failed* to see why. Usually the file is damaged or not really an image. |
 | `running scripts is disabled on this system` (Windows) | Only when installing [without uv](#without-uv): you are in PowerShell. Use Command Prompt instead — the `cmd` trick — or ask IT to allow local scripts. |
 
-If you need to ask someone for help, send them a **screenshot of the browser window** and
-the **last 20 lines** the terminal printed. Those two things resolve most questions
-immediately.
+If you need help, write to us:
+
+- Filip Bím — [filip.bim@mzk.cz](mailto:filip.bim@mzk.cz)
+- Martina Dvořáková — [dvorakovam@mzk.cz](mailto:dvorakovam@mzk.cz)
+
+Attach a **screenshot of the browser window** and the **last 20 lines** the terminal printed.
+Those two things resolve most questions immediately.
 
 ## Prefer typing commands?
 
@@ -232,11 +317,21 @@ The step 2 line does exactly this. Install uv:
     powershell -ExecutionPolicy ByPass -c "irm https://astral.sh/uv/install.ps1 | iex"
     ```
 
-=== "Mac / Linux"
+=== "Mac"
 
     ```bash
     curl -LsSf https://astral.sh/uv/install.sh | sh
     ```
+
+=== "Linux"
+
+    ```bash
+    curl -LsSf https://astral.sh/uv/install.sh | sh
+    ```
+
+If you already use [Homebrew](https://brew.sh) on a Mac, `brew install uv` works too; on
+Windows, `winget install --id=astral-sh.uv -e`. The step 2 line then uses that uv instead of
+downloading its own, so you can also simply run the step 2 line after installing uv this way.
 
 Close the terminal, open a new one, and install TuzkaOCR. Put the newest version from the
 [latest release page](https://github.com/moravianlibrary/TuzkaOCR/releases/latest) in place
@@ -345,7 +440,13 @@ To confirm Python arrived safely, type this and press <kbd>Enter</kbd>:
     python --version
     ```
 
-=== "Mac / Linux"
+=== "Mac"
+
+    ```bash
+    python3 --version
+    ```
+
+=== "Linux"
 
     ```bash
     python3 --version
@@ -375,7 +476,21 @@ in order.
     pip install .
     ```
 
-=== "Mac / Linux"
+=== "Mac"
+
+    ```bash
+    python3 -m venv .venv
+    ```
+
+    ```bash
+    source .venv/bin/activate
+    ```
+
+    ```bash
+    pip install .
+    ```
+
+=== "Linux"
 
     ```bash
     python3 -m venv .venv
@@ -419,7 +534,13 @@ so you have to re-enter the folder and re-activate before `tuzkaocr` exists agai
     .venv\Scripts\activate
     ```
 
-=== "Mac / Linux"
+=== "Mac"
+
+    ```bash
+    source .venv/bin/activate
+    ```
+
+=== "Linux"
 
     ```bash
     source .venv/bin/activate

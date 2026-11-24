@@ -58,6 +58,13 @@ require an `X-API-Key` header (see [Setting an API key](docs/docker.md#setting-a
 See [HTTP API](docs/api.md), [Docker](docs/docker.md) and
 [Configuration](docs/configuration.md).
 
+## Contact
+
+TuzkaOCR is developed at the Moravian Library in Brno. Questions, problems and feedback:
+
+- Filip Bím — [filip.bim@mzk.cz](mailto:filip.bim@mzk.cz)
+- Martina Dvořáková — [dvorakovam@mzk.cz](mailto:dvorakovam@mzk.cz)
+
 ## License
 
 Code: Apache License 2.0 (`LICENSE`, `NOTICE`). Models in `tuzkaocr/models/`:

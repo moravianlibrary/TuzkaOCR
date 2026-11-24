@@ -1,0 +1,17 @@
+.md-typeset .tabbed-set {
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 0.3rem;
+  padding: 0 0.8rem 0.2rem;
+}
+
+.md-typeset .tabbed-labels {
+  box-shadow: 0 -0.05rem var(--md-default-fg-color--lightest) inset;
+  margin: 0 -0.8rem;
+  padding: 0 0.4rem;
+}
+
+.md-typeset .tabbed-labels > label {
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.85em 1em 0.7em;
+}
