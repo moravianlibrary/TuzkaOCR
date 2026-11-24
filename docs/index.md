@@ -11,11 +11,12 @@ Runtime runs.
 ## What it does
 
 - Page OCR for scanned books, archival material, and historical documents.
-- Four material domains: printed, kramarky broadsheets, Czech handwriting, and German
-  Kurrent/Sütterlin.
+- Three material domains: printed, kramarky broadsheets, and handwriting (Czech, and
+  German Kurrent/Sütterlin).
 - ALTO XML output with page, block, line, and word coordinates, plus explicit model
   provenance.
 - PAGE XML output with line baselines and polygons, for Transkribus, eScriptorium and OCR-D.
+- A point-and-click browser app (`tuzkaocr app`) for people who do not use a terminal.
 - A command-line tool for single pages and batch directories.
 - A FastAPI service with asynchronous job processing, and CPU and GPU container images.
 - Optional API-key authentication, single-key or per-caller.
@@ -25,7 +26,7 @@ Runtime runs.
 1. Load the image with OpenCV.
 2. Detect regions, baselines, and line heights with the layout model.
 3. Extract perspective-corrected line crops.
-4. For handwritten and Kurrent pages, read all line styles first, then recognize each line
+4. For handwritten pages, read all line styles first, then recognize each line
    with the page-level style. Other domains recognize each line directly.
 5. Assemble ALTO XML, PAGE XML or plain text.
 
@@ -40,8 +41,9 @@ tuzkaocr page.jpg --format txt --out page.txt
 ```
 
 !!! tip "New to the command line?"
-    [Step by step, no experience needed](beginners.md) walks through the same setup
-    assuming no terminal experience, with the Windows and Mac differences spelled out.
+    [Step by step, no experience needed](beginners.md) installs TuzkaOCR with one copied
+    line and then works in the browser with `tuzkaocr app` — no typing of file names or
+    options.
 
 [Full installation instructions](install.md){ .md-button .md-button--primary }
 [CLI reference](cli.md){ .md-button }

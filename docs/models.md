@@ -9,8 +9,7 @@ clients choose a domain, never a model file.
 |---|---|---|---|
 | `default` (also `print`) | Printed books and general scans | `dec-B-v2` | `rec-E-v7` |
 | `kramarky` | Kramarky broadsheet prints | `dec-B-v1k` | `rec-E-v4k7` |
-| `handwritten` | Czech handwriting | `dec-B-v2h` | `rec-I-v2` |
-| `kurrent` | German Kurrent / Sütterlin script | `dec-B-v2h` | `rec-I-v2` |
+| `handwritten` | Czech handwriting and German Kurrent / Sütterlin script | `dec-B-v2h` | `rec-I-v2` |
 
 Compared with `rec-E-v5`, `rec-E-v7` reads large display type, dark or coloured paper, faint
 typewriting, carbon copies, dot-matrix print and one-line formulas better, and mostly
@@ -27,6 +26,13 @@ the same directory; TuzkaOCR refuses to start without the style file.
 
 Picking the right domain matters more than any other setting.
 
+!!! note "`kurrent` was removed in 1.11.0"
+    The `kurrent` domain used the same models and settings as `handwritten`, which reads
+    Kurrent and Sütterlin, so it was removed. `--domain kurrent`, the API `domain=kurrent`,
+    `TUZKAOCR_DEFAULT_DOMAIN=kurrent` and custom packs with `"base": "kurrent"` now fail with
+    a message pointing to `handwritten`. `TUZKAOCR_KURRENT_LAYOUT_MODEL` and
+    `TUZKAOCR_KURRENT_OCR_MODEL` are no longer read.
+
 ## What ships in the package
 
 Model files are installed as package data, so nothing is downloaded at first run.
@@ -35,11 +41,11 @@ Model files are installed as package data, so nothing is downloaded at first run
 |---|---|---|
 | `dec-B-v2.onnx` | 10.6 MB | Layout, printed |
 | `dec-B-v1k.onnx` | 10.6 MB | Layout, kramarky |
-| `dec-B-v2h.onnx` | 10.6 MB | Layout, handwritten and Kurrent |
+| `dec-B-v2h.onnx` | 10.6 MB | Layout, handwritten |
 | `rec-E-v7.onnx` | 3.2 MB | Recognition, printed |
 | `rec-E-v5.onnx` | 3.2 MB | Older printed recognizer, selectable by name |
 | `rec-E-v4k7.onnx` | 3.2 MB | Recognition, kramarky |
-| `rec-I-v2.onnx` | 12.6 MB | Recognition, handwritten and Kurrent |
+| `rec-I-v2.onnx` | 12.6 MB | Recognition, handwritten |
 | `rec-I-v2.style.onnx` | 0.3 MB | Page style, used with `rec-I-v2.onnx` |
 | `rec-H-v6.onnx` | 12.4 MB | Older handwritten recognizer, selectable by name |
 | `role-H5.onnx` | 1.1 MB | Line role classifier |

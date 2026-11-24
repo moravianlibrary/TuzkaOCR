@@ -192,7 +192,7 @@ Off by default, which is only safe on a trusted network. Two modes, both using t
 version and a `custom` boolean; pack names are not exposed on this public endpoint:
 
 ```json
-{"status": "ok", "version": "1.10.0", "custom": false}
+{"status": "ok", "version": "1.11.0", "custom": false}
 ```
 
 `GET /api/v1/version` uses the API key when authentication is enabled and lists pack names,
@@ -200,7 +200,7 @@ versions, bases, and any skipped-pack reason:
 
 ```json
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "custom": true,
   "default_domain": "slovak",
   "domains": [
@@ -218,15 +218,14 @@ curl -s http://localhost:8000/api/v1/models
 
 ```json
 {
-  "version": "1.10.0",
+  "version": "1.11.0",
   "defaults":    {"ocr_model": "rec-E-v7.onnx",  "layout_model": "dec-B-v2.onnx", "height_scale": 1.0},
   "kramarky":    {"ocr_model": "rec-E-v4k7.onnx", "layout_model": "dec-B-v1k.onnx"},
   "handwritten": {"ocr_model": "rec-I-v2.onnx",  "layout_model": "dec-B-v2h.onnx"},
-  "kurrent":     {"ocr_model": "rec-I-v2.onnx",  "layout_model": "dec-B-v2h.onnx"},
   "domains":     [{"name": "slovak", "version": "1.0.0", "base": "print", "status": "ok"}],
   "slovak":      {"ocr_model": "rec-sk.onnx", "layout_model": "dec-B-v2.onnx"},
   "available":   {"ocr_models": ["..."], "layout_models": ["..."]},
-  "selectable_via_domain": ["default", "handwritten", "kramarky", "kurrent", "slovak"]
+  "selectable_via_domain": ["default", "handwritten", "kramarky", "slovak"]
 }
 ```
 

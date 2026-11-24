@@ -54,7 +54,7 @@ near `PAGE_WORKERS × LINE_WORKERS × OCR_THREADS`, so do not oversubscribe a sm
 |---|---|---|
 | `TUZKAOCR_HEIGHT_SCALE` | `1.0` | Multiplies predicted line heights (valid range 0.1–10.0) |
 | `TUZKAOCR_MAX_WIDTH` | `3400` | Maximum line-crop width fed to the recognizer, in pixels |
-| `TUZKAOCR_ADAPTIVE_DOWNSAMPLE` | `true` | Size the printed layout pass to each page's text size (never for `handwritten`, `kurrent` or `kramarky`) |
+| `TUZKAOCR_ADAPTIVE_DOWNSAMPLE` | `true` | Size the printed layout pass to each page's text size (never for `handwritten` or `kramarky`) |
 | `TUZKAOCR_LAYOUT_LINE_HEIGHT` | `12` | Target text-line height, in pixels, at the layout model input when adaptive downsampling is on (valid range 4–64); `0` falls back to the fixed downsample |
 | `TUZKAOCR_READING_ORDER` | `columns` | Order of text blocks on printed pages: `columns` (column by column, aware of printed rules) or `basic` (horizontal bands, left to right); see [reading order](#reading-order) |
 | `TUZKAOCR_LARGE_TEXT` | `true` | Extra layout pass for text far larger than the body text, such as newspaper mastheads; see [large text](#large-text) |
@@ -72,7 +72,7 @@ near `PAGE_WORKERS × LINE_WORKERS × OCR_THREADS`, so do not oversubscribe a sm
 | `TUZKAOCR_ORIENTATION_RECHECK_CHARS` | `200` | Recheck only pages with at least this many characters |
 
 `CROP_ENDPOINT_EXT` and `COLUMN_SPLIT` are set by the domain (`0.3` and `true` for
-`handwritten` and `kurrent`), so the environment value only affects printed pages.
+`handwritten`), so the environment value only affects printed pages.
 
 ### Contrast normalisation
 
@@ -102,7 +102,7 @@ newspaper type gets a finer layout pass, large book type a coarser one. Broadshe
 about 2× in layout; ordinary pages cost the same as a fixed pass.
 
 Set `TUZKAOCR_ADAPTIVE_DOWNSAMPLE=false` (CLI `--no-adaptive`) to use the fixed downsample.
-The `handwritten`, `kurrent` and `kramarky` domains always use the fixed downsample.
+The `handwritten` and `kramarky` domains always use the fixed downsample.
 
 ### Reading order
 
@@ -202,8 +202,6 @@ in [HTTP API](api.md#authentication).
 | `TUZKAOCR_KRAMARKY_OCR_MODEL` | `rec-E-v4k7.onnx` |
 | `TUZKAOCR_HANDWRITTEN_LAYOUT_MODEL` | `dec-B-v2h.onnx` |
 | `TUZKAOCR_HANDWRITTEN_OCR_MODEL` | `rec-I-v2.onnx` |
-| `TUZKAOCR_KURRENT_LAYOUT_MODEL` | `dec-B-v2h.onnx` |
-| `TUZKAOCR_KURRENT_OCR_MODEL` | `rec-I-v2.onnx` |
 | `TUZKAOCR_VOCAB` | `vocab.json` |
 | `TUZKAOCR_LANG_MODEL` | `lang-A-v1.npz` |
 

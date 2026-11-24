@@ -12,8 +12,7 @@ plain text. It needs about 13 MB of models per domain and no GPU.
 |---|---|
 | `default` | Printed books, periodicals and general scans |
 | `kramarky` | Kramarky broadsheet prints only |
-| `handwritten` | Czech handwriting |
-| `kurrent` | German Kurrent / Sütterlin script |
+| `handwritten` | Czech handwriting and German Kurrent / Sütterlin script |
 
 ## Quickstart
 
@@ -24,6 +23,9 @@ curl -LsSf https://moravianlibrary.github.io/TuzkaOCR/install.sh | sh
 ```
 
 Windows: `powershell -ExecutionPolicy ByPass -c "irm https://moravianlibrary.github.io/TuzkaOCR/install.ps1 | iex"`
+
+Then `tuzkaocr app` opens a point-and-click app in your browser: pick a folder, tick pages,
+read.
 
 Or from a checkout:
 

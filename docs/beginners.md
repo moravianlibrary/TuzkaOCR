@@ -1,18 +1,18 @@
 # Step by step, no experience needed
 
 This page assumes you have never used a command line and do not want to learn one. It gets
-you from a fresh computer to OCR'd pages by copying and pasting a handful of lines.
+you from a fresh computer to OCR'd pages.
 
-Setup takes about 5 minutes and you do it **once**: one line to install, one to check.
-After that, OCR'ing a page is a single line, in any terminal window, from any folder.
+Setup takes about 5 minutes and you do it **once**: copy one line into a terminal. After
+that, you type `tuzkaocr app` and do everything else with the mouse, in a window in your web
+browser — pick a folder of scans, tick the pages, press a button.
 
 !!! info "What you will be typing into"
     A **terminal** (also called Command Prompt, or Terminal) is a window where you type a
     line, press <kbd>Enter</kbd>, and the computer does it. It looks bare, but you cannot
     break anything by typing the lines on this page.
 
-    Two habits that save trouble: **copy and paste** the lines rather than retyping them,
-    and run them **one at a time**, waiting for each to finish.
+    **Copy and paste** the lines rather than retyping them.
 
 ## Before you start: will this work on your computer?
 
@@ -66,154 +66,154 @@ It has worked when the last lines say
 **`TuzkaOCR … is installed`**.
 
 Now **close the terminal window and open a new one**, as in step 1 — only a new window knows
-about `tuzkaocr`. Check it worked:
-
-```bash
-tuzkaocr --help
-```
-
-A list of options means you are done setting up. From now on `tuzkaocr` works in every new
-terminal window.
+about `tuzkaocr`.
 
 !!! note "On a work computer"
     If the line is refused or blocked, your IT department restricts installing software.
     Send them a link to this page, or use [the way without uv](#without-uv), which needs
     Python installed instead.
 
-## Step 3 — Open a terminal in your scans folder
+## Step 3 — Start the app
 
-The terminal needs to be "looking at" the folder with your scans, so that short file names
-like `page.jpg` work.
-
-=== "Windows"
-
-    1. Open the folder with your scans in File Explorer.
-    2. Click once on the **address bar** at the top — the strip showing the folder path.
-    3. Type `cmd` over what is there and press <kbd>Enter</kbd>.
-
-    A black window opens, already pointed at the right folder.
-
-=== "Mac"
-
-    1. Open **Terminal** (press <kbd>⌘</kbd><kbd>Space</kbd>, type `terminal`, press
-       <kbd>Enter</kbd>).
-    2. Type `cd` followed by a single space — do not press Enter yet.
-    3. Drag the folder with your scans from Finder onto the Terminal window. The path
-       fills itself in.
-    4. Now press <kbd>Enter</kbd>.
-
-=== "Linux"
-
-    Right-click the folder with your scans and choose **Open in Terminal**.
-
-## Step 4 — OCR your first page
-
-Take a scanned image — JPEG, PNG, or TIFF — in the folder your terminal is looking at. Say
-it is called `page.jpg`. Then:
+In the new terminal window, type:
 
 ```bash
-tuzkaocr page.jpg --format txt --out page.txt
+tuzkaocr app
 ```
 
-After a few seconds:
+Your web browser opens TuzkaOCR on its own. The app runs on your computer only — nothing is
+uploaded, and it works without an internet connection.
 
-```
-Done in 2.4s — 37 lines → page.txt
-```
+![The TuzkaOCR app: folders on the left, scans in the middle, settings on the right](images/app.png)
 
-`page.txt` is now sitting in the same folder. Open it by double-clicking. That is the text
-of your scan.
+**Leave the terminal window open** while you work; it is what runs the app. When you are
+done, close it, or press <kbd>Ctrl</kbd>+<kbd>C</kbd> in it.
 
-If your file is named something else, use its real name — and if the name contains spaces,
-wrap it in quotes:
+If the browser does not open by itself, the terminal shows a line starting with
+`http://127.0.0.1:` — copy the whole line into your browser's address bar.
 
-```bash
-tuzkaocr "scan 001.jpg" --format txt --out "scan 001.txt"
-```
+## Step 4 — Read your first pages
 
-## Step 5 — Which setting for which material
+1. **Find your scans.** Use the places on the left — *Home*, *Desktop*, *Documents*,
+   *Downloads*, *Pictures*, and any USB drives — and click folders to open them. The path
+   at the top takes you back up. The app shows only images it can read: JPEG, PNG and
+   TIFF.
+2. **Tick the pages** you want to read, or click **Select all**. Click a column title —
+   *Name*, *Size*, *Status* — to sort by it.
+3. **Choose the document type** on the right. This matters more than anything else:
+   reading handwriting with the printed setting, or the other way round, gives nonsense.
 
-One choice matters far more than any other: telling TuzkaOCR what kind of writing it is
-looking at. Add `--domain` followed by the right word.
+    | Your material | Choose |
+    |---|---|
+    | Printed books, newspapers, typescripts — most scans | **Printed** |
+    | Letters, chronicles, registers; Latin script or German Kurrent | **Handwriting** |
+    | Czech kramářské tisky (broadside ballads), and nothing else | **Broadside ballads** |
 
-| Your material | Add this |
-|---|---|
-| Printed books, most scans | nothing — this is the default |
-| Kramarky broadsheet prints | `--domain kramarky` |
-| Czech handwriting | `--domain handwritten` |
-| Old German handwriting (Kurrent, Sütterlin) | `--domain kurrent` |
+4. **Choose what to save.** *Plain text* is what you read; *ALTO XML* records where every
+   word sits on the page, which digital libraries and viewers need. Keep both if unsure.
+5. Press **Read … pages**.
 
-```bash
-tuzkaocr letter.jpg --domain handwritten --format txt --out letter.txt
-```
+A bar shows the progress and the time left. The first page takes a little longer while the
+app loads. You can keep browsing meanwhile; **Stop** finishes the current page and stops.
+A page that cannot be read — a damaged file, say — is marked *Failed* and the others carry
+on.
 
-Using the printed setting on handwriting — or the other way round — produces nonsense, so
-it is worth getting right. Note that `kramarky` is meant for kramarky broadsheets
-specifically; for ordinary newspapers and periodicals, leave the setting off.
+When it finishes, **Show text** puts each scan next to its text, and **Open folder** shows
+the files.
 
-## A whole folder of scans
+!!! note "On a Mac: *Terminal would like to access files in your Documents folder*"
+    macOS asks once per folder such as Documents, Desktop or Downloads. Click **Allow**.
+    If you clicked *Don't Allow*, the app says *This folder cannot be opened*; turn it back
+    on in **System Settings → Privacy & Security → Files and Folders → Terminal**.
 
-Put your images in a folder — say `scans` — inside the folder your terminal is looking at,
-then:
+## Where the results go
 
-```bash
-tuzkaocr scans --batch --format txt --out-dir results
-```
+Next to your scans, in a new folder called `TuzkaOCR`. Reading
+`Chronicle/page_001.jpg` writes `Chronicle/TuzkaOCR/page_001.txt` and
+`page_001.alto.xml`. Your scans are never changed.
 
-It works through them one by one, reporting progress and an estimate of the time left:
+To put the results somewhere else, click **Change…** next to the results folder, pick or
+create a folder, and click **Use this folder**. From then on results from every scan folder
+go there, until you click **Go back to the default**. If you cannot save into the scans
+folder — a CD or a read-only network drive — the results go to your Documents folder
+instead, and the app says so.
 
-```
-Processing 148 images with 2 worker(s)...
-[   1/ 148] 0001.jpg 3.4s  ETA 4.2m
-[   2/ 148] 0002.jpg 3.1s  ETA 4.0m
-```
+## Coming back later
 
-The text files appear in a `results` folder, each named after its image. Leave the window
-open while it runs; closing it stops the work. A page that fails is reported and skipped,
-and the rest carry on.
-
-!!! tip "If your computer becomes sluggish"
-    Add `--workers 1` to the end of the line. It processes one page at a time, which is
-    slower but much gentler on an older machine.
+Open a terminal (step 1) and type `tuzkaocr app` again. The app remembers your last folder
+and settings. Pages read earlier show *Read*, with a **View** link.
 
 ## Updating to a new version
 
 Run the [step 2](#step-2-install-tuzkaocr) line again. It always installs the newest
 release, replacing the old one.
 
-## Want the coordinates too?
+## Your own model
 
-Everything above produces plain text. TuzkaOCR can also produce **ALTO XML**, which records
-where on the page every single word sits — what a library catalogue or a viewer that
-highlights search results needs.
+If your institution gave you a custom model — a file ending in `.tpack` — copy it into
+the folder below, then start the app again. It appears as an extra document type.
 
-```bash
-tuzkaocr page.jpg --out page.alto.xml
-```
+=== "Windows"
 
-Do not try to read that file yourself; it is for software. Both at once:
+    `%USERPROFILE%\.local\share\tuzkaocr\domains\`
 
-```bash
-tuzkaocr page.jpg --format multi --out page
-```
+=== "Mac / Linux"
 
-That writes `page.alto.xml` and `page.txt` for the price of one.
+    `~/.local/share/tuzkaocr/domains/`
+
+[Custom domain packs](custom-domains.md) has the details.
 
 ## When something looks wrong
 
 | What you see | What it means |
 |---|---|
 | `command not found` / `is not recognized` | Installed with the step 2 line: open a new terminal window — windows opened before the install do not see it. Installed [without uv](#without-uv): the `(.venv)` marker is missing from your prompt; re-run the [activate line](#coming-back-tomorrow). |
-| `No such file or directory` | The image name is not exactly right, or the file is not in this folder. Check spelling, and quote names containing spaces. |
-| `running scripts is disabled on this system` (Windows) | Only when installing [without uv](#without-uv): you are in PowerShell. Use Command Prompt instead — the `cmd` trick — or ask IT to allow local scripts. |
-| The text is gibberish | Wrong `--domain` for the material. See [step 5](#step-5-which-setting-for-which-material). |
+| The browser shows *TuzkaOCR has stopped* | The terminal window was closed. Open one and type `tuzkaocr app`. |
+| The browser says the page cannot be reached | Same: the app is not running. Start it again; it opens a new page. |
+| *This folder cannot be opened* | Your account may not read it. On a Mac, see the note in [step 4](#step-4-read-your-first-pages). |
+| The text is gibberish | Wrong document type for the material. See [step 4](#step-4-read-your-first-pages). |
 | The text is mostly right but words are mangled | Likely the scan itself. Below roughly 200 dpi, no setting rescues it. |
-| Some lines are missing entirely | Try adding `--height-scale 1.5` to the end of the line. |
-| The window closed on its own during a batch | The computer ran out of memory. Add `--workers 1`. |
+| A page is marked *Failed* | Hover over *Failed* to see why. Usually the file is damaged or not really an image. |
+| `running scripts is disabled on this system` (Windows) | Only when installing [without uv](#without-uv): you are in PowerShell. Use Command Prompt instead — the `cmd` trick — or ask IT to allow local scripts. |
 
-If you need to ask someone for help, send them: the **exact line you typed**, and the
-**last 20 lines** the terminal printed. Those two things resolve most questions
+If you need to ask someone for help, send them a **screenshot of the browser window** and
+the **last 20 lines** the terminal printed. Those two things resolve most questions
 immediately.
+
+## Prefer typing commands?
+
+Everything the app does is also a single typed line, which is handy for scripts or for
+thousands of pages. Open a terminal in the folder with your scans first:
+
+=== "Windows"
+
+    Open the folder in File Explorer, click once on the **address bar** at the top, type
+    `cmd` over what is there and press <kbd>Enter</kbd>.
+
+=== "Mac"
+
+    Type `cd` and a space in Terminal, drag the folder from Finder onto the window, and
+    press <kbd>Enter</kbd>.
+
+=== "Linux"
+
+    Right-click the folder and choose **Open in Terminal**.
+
+One page, as text:
+
+```bash
+tuzkaocr page.jpg --format txt --out page.txt
+```
+
+Add `--domain handwritten` for handwriting or `--domain kramarky` for kramářské tisky.
+Quote file names that contain spaces: `"scan 001.jpg"`. A whole folder, as text and ALTO:
+
+```bash
+tuzkaocr scans --batch --format multi --out-dir results
+```
+
+Leave the window open while it runs; add `--workers 1` if the computer becomes sluggish.
+[Command line](cli.md) lists every option.
 
 ## Other ways to install
 
@@ -237,10 +237,10 @@ The step 2 line does exactly this. Install uv:
 
 Close the terminal, open a new one, and install TuzkaOCR. Put the newest version from the
 [latest release page](https://github.com/moravianlibrary/TuzkaOCR/releases/latest) in place
-of `v1.10.1`:
+of `v1.11.0`:
 
 ```bash
-uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.10.1.zip
+uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.11.0.zip
 ```
 
 Keep `--python 3.13` in the line. Without it uv picks the newest Python, 3.15, which
@@ -402,8 +402,8 @@ tuzkaocr --help
 
 A list of options means you are done setting up.
 
-Then continue with [step 4](#step-4-ocr-your-first-page), with your scans in the TuzkaOCR
-folder. To update, download the new release and repeat these steps in its folder.
+Then type `tuzkaocr app` and continue with [step 4](#step-4-read-your-first-pages). To
+update, download the new release and repeat these steps in its folder.
 
 #### Coming back tomorrow
 
@@ -429,4 +429,4 @@ You do **not** repeat `pip install .` — that was genuinely one-time. If you ge
 
 - [CLI reference](cli.md) — every available option, once you want more control
 - [Troubleshooting](troubleshooting.md) — the technical version of the table above
-- [Models and domains](models.md) — what each `--domain` was built for
+- [Models and domains](models.md) — what each document type was built for

@@ -17,6 +17,35 @@ tuzkaocr --list-domains
 tuzkaocr --check-domains
 ```
 
+## Browser app
+
+```
+tuzkaocr app [--port N] [--no-browser]
+```
+
+Starts a small web server on `127.0.0.1` and opens it in the default browser: browse
+folders, tick pages, choose the document type and the formats (plain text, ALTO), read, and
+view each scan next to its text. It is the [beginners' route](beginners.md#step-3-start-the-app)
+and needs no options.
+
+| Option | Effect |
+|---|---|
+| `--port N` | Listen on port `N` instead of a free port chosen at random |
+| `--no-browser` | Do not open a browser; open the printed address yourself |
+
+- It listens on `127.0.0.1` only, so other computers cannot reach it. The printed address
+  carries a random key; requests without it, or with another `Host` header, are refused.
+- Results go to a `TuzkaOCR` folder inside the scans folder, or to a folder chosen in the
+  app. When the scans folder is read-only, they go to `Documents/TuzkaOCR/<folder name>`.
+  Files are named as in batch mode: `page.txt`, `page.alto.xml`.
+- Pages are read one at a time in the app's process, with up to 4 ONNX and line threads.
+  The output is the same as `tuzkaocr page.jpg --format multi` with the same domain.
+- The document types are the built-in `print`, `handwritten` and `kramarky` domains plus
+  every loaded [custom domain pack](custom-domains.md), shown with its `title` and
+  `description`. Packs are read when the app starts.
+- It reads the same environment variables as the CLI. Progress is printed to the terminal
+  as `[i/total] name time ETA`.
+
 ## Single page
 
 === "ALTO XML"
@@ -80,8 +109,7 @@ tuzkaocr letter.jpg --domain handwritten --format txt --out letter.txt
 |---|---|
 | `default`, `print` | Printed books and general scans |
 | `kramarky` | Kramarky broadsheet prints (a narrow, specialised domain) |
-| `handwritten` | Czech handwriting |
-| `kurrent` | German Kurrent / Sütterlin script |
+| `handwritten` | Czech handwriting and German Kurrent / Sütterlin script |
 | `<pack-name>` | A loaded custom domain pack |
 
 When a pack is marked as the default, `default` selects it. `print` and `printed` always

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "tuzkaocr"
-version = "1.10.0"
+version = "1.11.0"
 description = "OCR pipeline for scanned page and document images — ALTO XML or text output"
 license = { text = "Apache-2.0" }
 requires-python = ">=3.11,<3.15"
@@ -32,6 +32,7 @@ include = ["tuzkaocr*", "api*"]
 
 [tool.setuptools.package-data]
 "tuzkaocr.models" = ["*.onnx", "*.json", "*.npz", "LICENSE"]
+"tuzkaocr.app" = ["static/*"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

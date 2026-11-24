@@ -40,8 +40,13 @@ def _orientation_summary(metadata: dict) -> str:
 
 
 def main() -> None:
+    if sys.argv[1:2] == ["app"]:
+        from tuzkaocr.app.server import main as app_main
+        app_main(sys.argv[2:])
+        return
     p = argparse.ArgumentParser(
         description="tuzkaocr — OCR pipeline for scanned page and document images",
+        epilog="Run 'tuzkaocr app' to choose folders and read pages in your web browser instead.",
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("input", nargs="?", help="Image file or directory (with --batch)")
@@ -128,7 +133,8 @@ def main() -> None:
     args = p.parse_args()
     from tuzkaocr import __version__
     from tuzkaocr.config import Config
-    from tuzkaocr.domains import DomainPackError, DomainRegistry, build_domain_config, validate_registry_packs
+    from tuzkaocr.domains import (DomainPackError, DomainRegistry, build_domain_config,
+                                  retired_domain_message, validate_registry_packs)
 
     _base = Config()
     try:
@@ -160,7 +166,7 @@ def main() -> None:
 
     if args.list_domains:
         print(f"default: {registry.default_name}")
-        for name in ("print", "kramarky", "handwritten", "kurrent"):
+        for name in ("print", "kramarky", "handwritten"):
             print(f"{name} (built-in)")
         for status in registry.pack_statuses:
             if status.status == "ok":
@@ -173,6 +179,9 @@ def main() -> None:
     if not args.input:
         p.error("input is required unless --version, --list-domains, or --check-domains is used")
 
+    retired = retired_domain_message(args.domain)
+    if retired:
+        p.error(retired)
     try:
         domain = registry.resolve(args.domain)
     except KeyError:

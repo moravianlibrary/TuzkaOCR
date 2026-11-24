@@ -17,6 +17,21 @@
     - **`tuzkaocr` is not found afterwards** — open a new terminal window; windows opened
       before the install do not see it.
 
+??? failure "`tuzkaocr app` does not open the browser, or the page cannot be reached"
+    - **No browser opens** — common on servers and some Linux desktops. Copy the
+      `http://127.0.0.1:…/?k=…` line the terminal printed into a browser on the same
+      computer.
+    - **The page cannot be reached, or says *TuzkaOCR has stopped*** — the terminal running
+      the app was closed. Start `tuzkaocr app` again; each start uses a new address and key,
+      so old tabs say *This page belongs to an earlier TuzkaOCR window*.
+    - **On another computer** — not supported: the app listens on `127.0.0.1` only. Use the
+      [HTTP API](api.md) for remote use.
+
+??? failure "`tuzkaocr app` says *This folder cannot be opened*"
+    The account running the app cannot read the folder. On macOS, Terminal needs permission
+    for Desktop, Documents, Downloads and removable drives: **System Settings → Privacy &
+    Security → Files and Folders → Terminal**.
+
 ??? failure "`pip install` tries to build scipy or numpy, or asks for gfortran or a Fortran compiler"
     Your Python is too new. TuzkaOCR supports Python 3.11 to 3.14; on 3.15 no ready-made
     packages exist, so pip falls back to compiling them from source and fails. Do not

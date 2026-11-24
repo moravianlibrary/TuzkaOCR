@@ -18,8 +18,9 @@ from . import __version__, _models
 from .config import Config, env_is_explicit
 
 
-BUILTIN_NAMES = ("default", "print", "printed", "kramarky", "handwritten", "kurrent")
-BUILTIN_DOMAIN_NAMES = ("print", "kramarky", "handwritten", "kurrent")
+BUILTIN_NAMES = ("default", "print", "printed", "kramarky", "handwritten")
+BUILTIN_DOMAIN_NAMES = ("print", "kramarky", "handwritten")
+RETIRED_DOMAINS = {"kurrent": ("1.11.0", "handwritten")}
 PACK_NAME_RE = re.compile(r"^[a-z][a-z0-9_-]{1,31}$")
 PACK_VERSION_RE = re.compile(r"^\d+\.\d+\.\d+$")
 SHA256_RE = re.compile(r"^[0-9a-f]{64}$")
@@ -93,11 +94,6 @@ def builtin_domains(base_cfg: Config) -> dict[str, Domain]:
         "handwritten": Domain(
             "handwritten", "handwritten", base_cfg.handwritten_layout_model,
             base_cfg.handwritten_ocr_model, base_cfg.vocab, crop_endpoint_ext=0.3,
-            column_split=True,
-        ),
-        "kurrent": Domain(
-            "kurrent", "kurrent", base_cfg.kurrent_layout_model,
-            base_cfg.kurrent_ocr_model, base_cfg.vocab, crop_endpoint_ext=0.3,
             column_split=True,
         ),
     }
@@ -279,12 +275,16 @@ def _read_manifest(source: Path, base_cfg: Config) -> tuple[dict[str, Any], Pack
         raise DomainPackError("name must match ^[a-z][a-z0-9_-]{1,31}$")
     if name in BUILTIN_NAMES:
         raise DomainPackError(f"name {name!r} is reserved for a built-in domain")
+    if name in RETIRED_DOMAINS:
+        raise DomainPackError(f"name {name!r} is reserved: {retired_domain_message(name)}")
     version = raw.get("version")
     _version_tuple(version if isinstance(version, str) else "")
     title = raw.get("title")
     if not isinstance(title, str) or not title.strip():
         raise DomainPackError("title must be a non-empty string")
     base = raw.get("base")
+    if base in RETIRED_DOMAINS:
+        raise DomainPackError(f"base {base!r} is no longer available: {retired_domain_message(base)}")
     if base not in BUILTIN_DOMAIN_NAMES:
         raise DomainPackError(f"base must be one of {BUILTIN_DOMAIN_NAMES}")
     if type(raw.get("default")) is not bool:
@@ -547,6 +547,8 @@ class DomainRegistry:
             if override in self.domains:
                 return override
             error = f"TUZKAOCR_DEFAULT_DOMAIN={override!r} is not a loaded domain"
+            if override in RETIRED_DOMAINS:
+                error = f"TUZKAOCR_DEFAULT_DOMAIN={override!r}: {retired_domain_message(override)}"
             if not check:
                 raise DomainPackError(error)
             self.errors.append(error)
@@ -578,6 +580,14 @@ def _domains_directory(directory: str | Path | None) -> Path | None:
     xdg = os.environ.get("XDG_DATA_HOME")
     data_home = Path(xdg).expanduser() if xdg else Path.home() / ".local" / "share"
     return data_home / "tuzkaocr" / "domains"
+
+
+def retired_domain_message(name: str) -> str | None:
+    if name not in RETIRED_DOMAINS:
+        return None
+    version, replacement = RETIRED_DOMAINS[name]
+    return (f"the {name!r} domain was removed in TuzkaOCR {version}; "
+            f"use {replacement!r}, which reads the same material")
 
 
 def build_domain_config(base_cfg: Config, domain: Domain, *,

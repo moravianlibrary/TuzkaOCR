@@ -13,7 +13,7 @@ from fastapi.security.api_key import APIKeyHeader
 
 from tuzkaocr import _models
 from tuzkaocr import __version__
-from tuzkaocr.domains import build_domain_config
+from tuzkaocr.domains import build_domain_config, retired_domain_message
 from tuzkaocr.images import (
     ImageDecodeError,
     decode_gray_image_path,
@@ -92,6 +92,9 @@ def _validate_domain(request: Request, domain: Optional[str]) -> Optional[str]:
         return None
     if domain in ("print", "printed"):
         return "print"
+    retired = retired_domain_message(domain)
+    if retired:
+        raise HTTPException(status_code=422, detail=retired[0].upper() + retired[1:])
     domains = request.app.state.domains
     if domain not in domains.domains:
         raise HTTPException(
@@ -314,10 +317,6 @@ async def list_models(request: Request, caller_name: Optional[str] = Depends(_re
         "handwritten": {
             "ocr_model":    Path(builtin["handwritten"].ocr_model).name,
             "layout_model": Path(builtin["handwritten"].layout_model).name,
-        },
-        "kurrent": {
-            "ocr_model":    Path(builtin["kurrent"].ocr_model).name,
-            "layout_model": Path(builtin["kurrent"].layout_model).name,
         },
         "available": {
             "ocr_models":    [f for f in onnx_files if "rec-" in f and ".style." not in f],
