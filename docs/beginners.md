@@ -1,5 +1,8 @@
 # Step by step, no experience needed
 
+!!! tip "Česky"
+    Tento návod je také [v češtině](zacatecnici.md).
+
 This page assumes you have never used a command line and do not want to learn one. It gets
 you from a fresh computer to OCR'd pages.
 

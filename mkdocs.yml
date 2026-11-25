@@ -47,6 +47,7 @@ nav:
   - Overview: index.md
   - Getting started:
       - Step by step (beginners): beginners.md
+      - Krok za krokem (česky): zacatecnici.md
       - Installation: install.md
       - CLI: cli.md
   - Running as a service:

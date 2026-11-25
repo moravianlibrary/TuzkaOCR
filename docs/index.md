@@ -53,7 +53,7 @@ tuzkaocr page.jpg --format txt --out page.txt
 | If you want to | Read |
 |---|---|
 | Install and run it locally | [Installation](install.md) then [CLI](cli.md) |
-| Do that without using a terminal before | [Step by step, no experience needed](beginners.md) |
+| Do that without using a terminal before | [Step by step, no experience needed](beginners.md) · [česky](zacatecnici.md) |
 | OCR pages over HTTP | [HTTP API](api.md) |
 | Deploy it as a service | [Docker](docker.md) |
 | Tune threads, memory, or limits | [Configuration](configuration.md) |
