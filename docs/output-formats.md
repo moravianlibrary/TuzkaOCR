@@ -43,7 +43,7 @@ alto SCHEMAVERSION="4.4"
 │   ├── sourceImageInformation
 │   │   ├── fileName                   the source image filename
 │   │   └── fileIdentifier             only when a source identifier is given
-│   ├── Processing ID="IdPreOperation" only when the image was downsampled for layout
+│   ├── Processing ID="IdPreOperationN" one per image transformation actually applied
 │   ├── Processing ID="IdLayout"
 │   └── Processing ID="IdRecognition"
 ├── Styles
@@ -110,9 +110,19 @@ they sit clear of the body text. Without roles, every block stays in the print s
 
 ### Model provenance
 
-Each `Processing` element records one stage: `IdPreOperation` (the downsampling factor used
-for layout analysis), `IdLayout` and `IdRecognition`, with the package version and the model
-name:
+Each `Processing` element records one stage: `IdLayout` and `IdRecognition`, with the
+package version and the model name, preceded by one numbered `IdPreOperation1`,
+`IdPreOperation2`, … for each transformation actually applied to the image before OCR:
+
+- **rotation**, when orientation detection (`TUZKAOCR_ORIENTATION=auto`) turned the page
+  upright; the settings give the angle, and coordinates still refer to the original image
+- **page contrast**, when `TUZKAOCR_CONTRAST=on`, or `auto` on a faint page, stretched the
+  page's gray levels; the settings give the ink and paper levels that were stretched
+- **line contrast**, when `TUZKAOCR_CONTRAST=line` stretched each line image before
+  recognition
+
+A page with none of these has no `IdPreOperation` element. Downsampling for layout analysis is
+internal and is not recorded.
 
 ```xml
 <Processing ID="IdRecognition">

@@ -544,6 +544,24 @@ class PageProcessor:
                 recheck_performed = True
         orientation_meta["orientation_recheck"] = recheck_performed
 
+        pre_operations = []
+        if angle:
+            pre_operations.append((
+                "page image rotated upright before layout analysis and recognition; "
+                "coordinates refer to the original image",
+                f"rotation {angle} degrees counterclockwise"))
+        if use_page_contrast and page_contrast_stats[1] - page_contrast_stats[0] > 8.0:
+            low, median = page_contrast_stats
+            pre_operations.append((
+                "page contrast stretched before layout analysis and recognition",
+                f"gray levels {low:.0f} (ink) to {median:.0f} (paper) stretched to 0-255"))
+        elif contrast_mode == "line" and chosen["line_data"]:
+            pre_operations.append((
+                "contrast of each text line image stretched before recognition",
+                "per-line gray levels from the darkest ink to the median background "
+                "stretched to 0-255"))
+        orientation_meta["pre_operations"] = pre_operations
+
         use_role = cfg.role_classifier if role_classifier is None else role_classifier
         if use_role:
             if self._role is None:
@@ -601,7 +619,7 @@ class PageProcessor:
             source_identifier=source_identifier,
             page_confidence=mean_conf,
             physical_img_nr=physical_img_nr,
-            layout_downsample=img_scale,
+            pre_operations=orientation_meta.pop("pre_operations", None),
             language=language,
             dpi=((cfg.alto_dpi or None) or dpi
                  or dpi_from_page_width(img_w, cfg.alto_page_width_mm)),

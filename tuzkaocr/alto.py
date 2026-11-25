@@ -526,17 +526,15 @@ def _emit_illustration(parent, block: dict, ctx: dict) -> None:
         })
 
 
-def _emit_pre_operation(parent, timestamp: str, agency: str | None,
-                        downsample: float, software_version: str) -> None:
-    step = ET.SubElement(parent, "Processing", {"ID": "IdPreOperation"})
+def _emit_pre_operation(parent, step_id: str, timestamp: str, agency: str | None,
+                        description: str, settings: str, software_version: str) -> None:
+    step = ET.SubElement(parent, "Processing", {"ID": step_id})
     ET.SubElement(step, "processingCategory").text = "preOperation"
     ET.SubElement(step, "processingDateTime").text = timestamp
     if agency:
         ET.SubElement(step, "processingAgency").text = _xml_safe(agency)
-    ET.SubElement(step, "processingStepDescription").text = (
-        "image downsampled for layout analysis")
-    ET.SubElement(step, "processingStepSettings").text = (
-        f"downsample factor {downsample:.2f}")
+    ET.SubElement(step, "processingStepDescription").text = _xml_safe(description)
+    ET.SubElement(step, "processingStepSettings").text = _xml_safe(settings)
     software = ET.SubElement(step, "processingSoftware")
     ET.SubElement(software, "softwareCreator").text = "tuzkaocr"
     ET.SubElement(software, "softwareName").text = "TuzkaOCR"
@@ -582,7 +580,7 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
                source_identifier: str | None = None,
                page_confidence: float | None = None,
                physical_img_nr: int | None = None,
-               layout_downsample: float | None = None,
+               pre_operations: list[tuple[str, str]] | None = None,
                language: str | None = None,
                dpi: int | None = None,
                agency: str | None = None,
@@ -627,8 +625,9 @@ def build_alto(page_id: str, img_h: int, img_w: int, blocks: list,
     timestamp = now.replace(microsecond=0).isoformat() if ndk else now.isoformat()
 
     if ndk:
-        if layout_downsample and abs(float(layout_downsample) - 1.0) > 1e-6:
-            _emit_pre_operation(desc, timestamp, agency, float(layout_downsample), software_version)
+        for index, (description, settings) in enumerate(pre_operations or (), start=1):
+            _emit_pre_operation(desc, f"IdPreOperation{index}", timestamp, agency,
+                                description, settings, software_version)
         if layout_name:
             _emit_processing(desc, "IdLayout", "layout", layout_name, timestamp, agency,
                              software_version, domain_description)
