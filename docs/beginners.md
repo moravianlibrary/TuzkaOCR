@@ -338,10 +338,10 @@ downloading its own, so you can also simply run the step 2 line after installing
 
 Close the terminal, open a new one, and install TuzkaOCR. Put the newest version from the
 [latest release page](https://github.com/moravianlibrary/TuzkaOCR/releases/latest) in place
-of `v1.11.0`:
+of `v1.11.1`:
 
 ```bash
-uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.11.0.zip
+uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.11.1.zip
 ```
 
 Keep `--python 3.13` in the line. Without it uv picks the newest Python, 3.15, which

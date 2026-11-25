@@ -7,7 +7,7 @@ deployment.
 ## Published image
 
 ```bash
-docker run -d -p 8000:8000 ghcr.io/moravianlibrary/tuzkaocr:1.11.0
+docker run -d -p 8000:8000 ghcr.io/moravianlibrary/tuzkaocr:1.11.1
 curl http://localhost:8000/healthz
 ```
 
@@ -15,7 +15,7 @@ curl http://localhost:8000/healthz
 {"status": "ok"}
 ```
 
-Tags: an exact version (`1.11.0`), the latest patch of a minor version (`1.11`), and
+Tags: an exact version (`1.11.1`), the latest patch of a minor version (`1.11`), and
 `latest`. Pin an exact version in production.
 
 ### Setting an API key
@@ -28,7 +28,7 @@ echo "$KEY"
 
 docker run -d -p 8000:8000 \
   -e TUZKAOCR_API_KEY="$KEY" \
-  ghcr.io/moravianlibrary/tuzkaocr:1.11.0
+  ghcr.io/moravianlibrary/tuzkaocr:1.11.1
 
 curl -H "X-API-Key: $KEY" http://localhost:8000/api/v1/models
 ```
@@ -47,7 +47,7 @@ docker compose pull cpu
 docker compose up -d cpu
 ```
 
-`TUZKAOCR_VERSION=1.11.0` selects the image version (default `latest`), and
+`TUZKAOCR_VERSION=1.11.1` selects the image version (default `latest`), and
 `TUZKAOCR_CPU_PORT` the host port (default 8000). To build the image from your checkout
 instead, use `docker compose up --build -d cpu`.
 

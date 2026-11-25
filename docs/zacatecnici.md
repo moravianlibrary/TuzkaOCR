@@ -349,11 +349,11 @@ Pokud na Macu používáte [Homebrew](https://brew.sh), funguje i `brew install 
 Windows `winget install --id=astral-sh.uv -e`. Příkaz z kroku 2 pak takto nainstalované
 uv použije a nebude stahovat vlastní, takže ho po instalaci uv můžete rovnou spustit.
 
-Zavřete terminál, otevřete nový a nainstalujte TuzkaOCR. Místo `v1.11.0` doplňte
+Zavřete terminál, otevřete nový a nainstalujte TuzkaOCR. Místo `v1.11.1` doplňte
 nejnovější verzi ze [stránky posledního vydání](https://github.com/moravianlibrary/TuzkaOCR/releases/latest):
 
 ```bash
-uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.11.0.zip
+uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.11.1.zip
 ```
 
 Část `--python 3.13` v příkazu nechte. Bez ní by uv zvolilo nejnovější Python 3.15, který

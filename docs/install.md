@@ -47,11 +47,11 @@ powershell -ExecutionPolicy ByPass -c "irm https://moravianlibrary.github.io/Tuz
 If `uv` is already on your `PATH` — from Homebrew (`brew install uv`), winget, pipx or
 uv's own installer — the script uses it instead of installing another copy. Open a new
 terminal afterwards. Rerunning the line upgrades to the newest release; set
-`TUZKAOCR_VERSION=v1.11.0` first to install a specific tag. The scripts
+`TUZKAOCR_VERSION=v1.11.1` first to install a specific tag. The scripts
 ([`install.sh`](install.sh), [`install.ps1`](install.ps1)) only wrap uv; by hand:
 
 ```bash
-uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.11.0.zip
+uv tool install --force --python 3.13 https://github.com/moravianlibrary/TuzkaOCR/archive/refs/tags/v1.11.1.zip
 ```
 
 Keep `--python`: uv otherwise picks the newest Python, which may not be supported. On
